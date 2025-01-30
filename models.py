@@ -46,19 +46,21 @@ class Car:
         self.reaction_time = reaction_time
 
     def run(self):
-        print(f"{self.name} arriving at {self.road.junction_start.name} at {self.env.now}")
-        yield self.car_queue.put(self)
+        while True:
+            print(f"{self.name} arriving at {self.road.junction_start.name} at {self.env.now}")
+            yield self.car_queue.put(self)
 
-        with self.road.junction_start.queue.request(priority=1) as request:
-            yield request
-            while self.road.junction_start.traffic_light.color == "RED" or self.car_queue.items[0] != self:
-                print(f"{self.name} waiting at red light at {self.env.now}")
-                yield self.env.timeout(self.reaction_time)
+            with self.road.junction_start.queue.request(priority=1) as request:
+                yield request
+                while self.road.junction_start.traffic_light.color == "RED" or self.car_queue.items[0] != self:
+                    print(f"{self.name} waiting at red light at {self.env.now}")
+                    yield self.env.timeout(self.reaction_time)
 
-            car = yield self.car_queue.get()
-            if car == self:
-                print(f"{self.name} entering {self.road.junction_start.name} at {self.env.now}")
-                travel_time = self.road.distance / self.road.speed
-                yield self.env.timeout(travel_time)
-                print(f"{self.name} arriving at {self.road.junction_end.name} at {self.env.now}")
+                car = yield self.car_queue.get()
+                if car == self:
+                    print(f"{self.name} entering {self.road.junction_start.name} at {self.env.now}")
+                    travel_time = self.road.distance / self.road.speed
+                    yield self.env.timeout(travel_time)
+                    self.road.junction_start = self.road.junction_end
+
 
