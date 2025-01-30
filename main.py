@@ -21,9 +21,9 @@ def main():
     junction_c.set_traffic_light(traffic_light_c)
 
     # Create roads connecting junctions
-    road_ab = Road("Road AB", 60, 10, junction_a, junction_b)
-    road_bc = Road("Road BC", 50, 15, junction_b, junction_c)
-    road_ca = Road("Road CA", 70, 20, junction_c, junction_a)
+    road_ab = Road("Road AB", 6, 10, junction_a, junction_b)
+    road_bc = Road("Road BC", 5, 15, junction_b, junction_c)
+    road_ca = Road("Road CA", 7, 20, junction_c, junction_a)
 
     car_queue = simpy.Store(env)
 
