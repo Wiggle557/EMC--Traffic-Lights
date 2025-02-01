@@ -73,6 +73,6 @@ class Car:
 
             with self.road.junction_start.queue.request(priority=1) as request:
                 yield request
-                while self.road.junction_start.traffic_light.color == "RED" or self.car_queue.items[0] != self:
+                while self.road.junction_start.traffic_light.colour == "RED" or self.car_queue.items[0] != self:
                     print(f"{self.name} waiting at red light at {self.env.now}")
                     yield self.env.timeout(self.reaction_time)
