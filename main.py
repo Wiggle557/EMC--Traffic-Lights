@@ -25,10 +25,12 @@ def main():
     road_bc = Road("Road BC", 5, 15, junction_b, junction_c)
     road_ca = Road("Road CA", 7, 20, junction_c, junction_a)
 
+    roads = [road_ab, road_bc, road_ca]
+
     car_queue = simpy.Store(env)
 
     # Setup environment with cars
-    env.process(setup(env, 20, car_queue, [road_ab, road_bc, road_ca], (1, 20)))
+    env.process(setup(env, 20, car_queue, roads, (1, 20)))
     env.run(until=180)
 
     print("Cars left in queue:")
