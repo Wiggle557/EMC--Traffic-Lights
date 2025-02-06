@@ -1,4 +1,5 @@
 import simpy
+import random
 
 class TrafficLight:
     def __init__(self, env: simpy.Environment, red_time=10, green_time=10):
@@ -38,33 +39,13 @@ class Road:
         self.junction_end = junction_end
 
 class Car:
-    def __init__(self, env: simpy.Environment, name: str, car_queue: simpy.Store, road: Road, reaction_time=1) -> None:
+    def __init__(self, env: simpy.Environment, name: str, car_queue: simpy.Store, road: Road, roads: list[Road], reaction_time=1) -> None:
         self.env = env
         self.name = name
         self.car_queue = car_queue
         self.road = road
         self.reaction_time = reaction_time
-        env = road.junction_start.env
-        # Create junctions
-        junction_a = Junction(env, "Junction A")
-        junction_b = Junction(env, "Junction B")
-        junction_c = Junction(env, "Junction C")
-
-        # Create traffic lights
-        traffic_light_a = TrafficLight(env, red_time=20, green_time=20)
-        traffic_light_b = TrafficLight(env, red_time=15, green_time=15)
-        traffic_light_c = TrafficLight(env, red_time=10, green_time=10)
-
-        # Assign traffic lights to junctions
-        junction_a.set_traffic_light(traffic_light_a)
-        junction_b.set_traffic_light(traffic_light_b)
-        junction_c.set_traffic_light(traffic_light_c)
-
-        # Create roads connecting junctions
-        road_ab = Road("Road AB", 6, 10, junction_a, junction_b)
-        road_bc = Road("Road BC", 5, 15, junction_b, junction_c)
-        road_ca = Road("Road CA", 7, 20, junction_c, junction_a)
-        self.roads = [road_ab,road_bc, road_ca]
+        self.roads = roads
 
     def run(self):
         while True:
@@ -74,5 +55,16 @@ class Car:
             with self.road.junction_start.queue.request(priority=1) as request:
                 yield request
                 while self.road.junction_start.traffic_light.colour == "RED" or self.car_queue.items[0] != self:
-                    print(f"{self.name} waiting at red light at {self.env.now}")
+                    print(f"{self.name} waiting at red light in {self.road.junction_start.name} at {self.env.now}")
                     yield self.env.timeout(self.reaction_time)
+
+                car = yield self.car_queue.get()
+                if car == self:
+                    print(f"{self.name} entering {self.road.junction_start.name} at {self.env.now}")
+                    travel_time = self.road.distance / self.road.speed
+                    yield self.env.timeout(travel_time)
+
+                    # Update the road to the next road in the loop
+                    next_junction = self.road.junction_end
+                    self.road = random.choice([road for road in self.roads if road.junction_start == next_junction])
+
