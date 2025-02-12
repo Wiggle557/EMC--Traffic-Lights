@@ -4,38 +4,24 @@ from setup import setup
 
 def main():
     env = simpy.Environment()
-
-    # Create junctions
-    junction_a = Junction(env, "Junction A")
-    junction_b = Junction(env, "Junction B")
-    junction_c = Junction(env, "Junction C")
-
-    # Create traffic lights
-    traffic_light_a = TrafficLight(env, red_time=20, green_time=20)
-    traffic_light_b = TrafficLight(env, red_time=15, green_time=15)
-    traffic_light_c = TrafficLight(env, red_time=10, green_time=10)
-
-    # Assign traffic lights to junctions
-    junction_a.set_traffic_light(traffic_light_a)
-    junction_b.set_traffic_light(traffic_light_b)
-    junction_c.set_traffic_light(traffic_light_c)
-
-    # Create roads connecting junctions
-    road_ab = Road("Road AB", 6, 10, junction_a, junction_b)
-    road_bc = Road("Road BC", 5, 15, junction_b, junction_c)
-    road_ca = Road("Road CA", 7, 20, junction_c, junction_a)
-
-    roads = [road_ab, road_bc, road_ca]
-
+    num_junctions = 4
+    junction_names="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    junctions:list[Junction] = []
+    traffic_lights = []
+    roads = []
+    for i in range(num_junctions):
+        junctions.append(Junction(env, f"Junction {junction_names[i]}"))
+        traffic_lights.append(TrafficLight(env, red_time=15, green_time=15))
+    for i in range(len(junctions)):
+        junctions[i].set_traffic_light(traffic_lights[i])
+        roads.append(Road(f"Road {junction_names[:num_junctions][i-1]}{junction_names[i]}",6,12,junctions[i-1],junctions[i]))
+    
     car_queue = simpy.Store(env)
 
     # Setup environment with cars
     env.process(setup(env, 20, car_queue, roads, (1, 20)))
     env.run(until=180)
 
-    print("Cars left in queue:")
-    for car in car_queue.items:
-        print(car.name)
 
 if __name__ == "__main__":
     main()
