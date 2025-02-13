@@ -27,19 +27,19 @@ class Junction:
         self.queue = simpy.PriorityResource(env, capacity=1)
 
 class Road:
-    def __init__(self, name: str, speed: int, distance: int, junction_start: Junction, junction_end: Junction):
+    def __init__(self, name: str, speed: int, distance: int, junction_start: Junction, junction_end: Junction, car_queue: simpy.Store):
         self.name = name
         self.speed = speed
         self.distance = distance
         self.junction_start = junction_start
         self.junction_end = junction_end
         self.traffic_light = None
+        self.car_queue = car_queue
 
 class Car:
-    def __init__(self, env: simpy.Environment, name: str, car_queue: simpy.Store, road: Road, roads: list[Road], reaction_time=1) -> None:
+    def __init__(self, env: simpy.Environment, name: str, road: Road, roads: list[Road], reaction_time=1) -> None:
         self.env = env
         self.name = name
-        self.car_queue = car_queue
         self.road = road
         self.reaction_time = reaction_time
         self.roads = roads
@@ -47,15 +47,15 @@ class Car:
     def run(self):
         while True:
             print(f"{self.name} arriving at {self.road.junction_start.name} at {self.env.now}")
-            yield self.car_queue.put(self)
+            yield self.road.car_queue.put(self)
 
             with self.road.junction_start.queue.request(priority=1) as request:
                 yield request
-                while self.road.traffic_light.color == "RED" or self.car_queue.items[0] != self:
+                while self.road.traffic_light.color == "RED" or self.road.car_queue.items[0] != self:
                     print(f"{self.name} waiting at red light in {self.road.junction_start.name} at {self.env.now}")
                     yield self.env.timeout(self.reaction_time)
 
-                car = yield self.car_queue.get()
+                car = yield self.road.car_queue.get()
                 if car == self:
                     print(f"{self.name} entering {self.road.junction_start.name} at {self.env.now}")
                     travel_time = self.road.distance / self.road.speed

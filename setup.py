@@ -2,7 +2,7 @@ from models import Car, Road
 import simpy
 import random
 
-def setup(env: simpy.Environment, num_cars: int, car_queue: simpy.Store, roads: list[Road], interval: tuple[int, int]):
+def setup(env: simpy.Environment, num_cars: int, roads: list[Road], interval: tuple[int, int]):
     """
     Sets up the roads and runs cars through the roads
 
@@ -15,7 +15,7 @@ def setup(env: simpy.Environment, num_cars: int, car_queue: simpy.Store, roads: 
     """
     for i in range(num_cars):
         road = random.choice(roads)
-        car = Car(env, f'Car {i}', car_queue, road, roads, random.randint(1, 6))
+        car = Car(env, f'Car {i}', road, roads, random.randint(1, 6))
         env.process(car.run())
         yield env.timeout(random.randint(*interval))
 
