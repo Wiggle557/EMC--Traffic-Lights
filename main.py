@@ -1,8 +1,9 @@
 import simpy
-from models import TrafficLight, Road, Junction
+from models import TrafficLight, Road, Junction, SimulationStats
 from setup import setup
 
 def main():
+    stats = SimulationStats()
     env = simpy.Environment()
 
     # Create junctions
@@ -30,6 +31,7 @@ def main():
     # Setup environment with cars
     env.process(setup(env, 20, car_queue, [road_ab, road_bc, road_ca], (1, 20)))
     env.run(until=180)
+
 
     print("Cars left in queue:")
     for car in car_queue.items:

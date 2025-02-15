@@ -1,6 +1,17 @@
 import simpy
 import random
 
+class SimulationStats:
+    def __init__(self):
+        self.pain = "pain"
+        self.junction_end = {}
+    
+    def end_of_road(self, junction_name, car_name):
+        self.junction_end[car_name] = {junction_name}
+        
+
+
+
 class TrafficLight:
     def __init__(self, env: simpy.Environment, red_time=10, green_time=10):
         self.env = env
@@ -8,17 +19,18 @@ class TrafficLight:
         self.action = env.process(self.run())
         self.red_time = red_time
         self.green_time = green_time
+        self.junction = ""
 
     def run(self):
         while True:
             if self.colour == "GREEN":
                 yield self.env.timeout(self.green_time)
                 self.colour = "RED"
-                print(f"Light turned RED at {self.env.now}")
+                print(f"Light {self.junction} turned RED at {self.env.now}")
             else:
                 yield self.env.timeout(self.red_time)
                 self.colour = "GREEN"
-                print(f"Light turned GREEN at {self.env.now}")
+                print(f"Light {self.junction} turned GREEN at {self.env.now}")
 
 class Junction:
     def __init__(self, env: simpy.Environment, name: str):
@@ -29,6 +41,7 @@ class Junction:
 
     def set_traffic_light(self, traffic_light: TrafficLight):
         self.traffic_light = traffic_light
+        self.traffic_light.junction = self.name
 
 class Road:
     def __init__(self, name: str, speed: int, distance: int, junction_start: Junction, junction_end: Junction):
@@ -39,7 +52,7 @@ class Road:
         self.junction_end = junction_end
 
 class Car:
-    def __init__(self, env: simpy.Environment, name: str, car_queue: simpy.Store, road: Road, roads: list[Road], reaction_time=1) -> None:
+    def __init__(self, env: simpy.Environment, name: str, car_queue: simpy.Store, road: Road, roads: list[Road], reaction_time=0.1) -> None:
         self.env = env
         self.name = name
         self.car_queue = car_queue
@@ -55,7 +68,10 @@ class Car:
             with self.road.junction_start.queue.request(priority=1) as request:
                 yield request
                 while self.road.junction_start.traffic_light.colour == "RED" or self.car_queue.items[0] != self:
-                    print(f"{self.name} waiting at red light in {self.road.junction_start.name} at {self.env.now}")
+                    if self.road.junction_start.traffic_light.colour == "RED":
+                        print(f"{self.name} waiting at red light in {self.road.junction_start.name} at {self.env.now}")
+                    else:
+                         print(f"{self.name} waiting for cars at {self.road.junction_start.name} at {self.env.now}")
                     yield self.env.timeout(self.reaction_time)
 
                 car = yield self.car_queue.get()
