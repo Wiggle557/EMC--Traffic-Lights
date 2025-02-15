@@ -1,11 +1,20 @@
 import simpy
 import random
+<<<<<<< HEAD
 import math
+=======
+
+>>>>>>> a7419b5 (Updating to brandon's work)
 
 class TrafficLight:
     def __init__(self, env: simpy.Environment, red_time=10, green_time=10, red_amber_time = 3, amber_time = 3, colour="GREEN"):
         self.env = env
+<<<<<<< HEAD
         self.colour = colour
+=======
+        self.color = "GREEN"
+        self.action = env.process(self.run())
+>>>>>>> a7419b5 (Updating to brandon's work)
         self.red_time = red_time
         self.green_time = green_time
         self.red_amber_time = red_amber_time
@@ -56,6 +65,7 @@ class Junction:
 
     def run(self):
         while True:
+<<<<<<< HEAD
             for light in self.traffic_lights:
                 if light.colour == "RED":
                     light.colour = "GREEN"
@@ -67,6 +77,23 @@ class Junction:
                     yield self.env.timeout(light.red_time)
 
 
+=======
+            if self.color == "GREEN":
+                yield self.env.timeout(self.green_time)
+                self.color = "RED"
+                print(f"Light turned RED at {self.env.now}")
+            else:
+                yield self.env.timeout(self.red_time)
+                self.color = "GREEN"
+                print(f"Light turned GREEN at {self.env.now}")
+
+class Junction:
+    def __init__(self, env: simpy.Environment, name: str):
+        self.env = env
+        self.name = name
+        self.queue = simpy.PriorityResource(env, capacity=1)
+>>>>>>> a7419b5 (Updating to brandon's work)
+
 class Road:
     def __init__(self, name: str, speed: int, distance: int, junction_start: Junction, junction_end: Junction, car_queue: simpy.Store):
         self.name = name
@@ -74,21 +101,33 @@ class Road:
         self.distance = distance
         self.junction_start = junction_start
         self.junction_end = junction_end
+<<<<<<< HEAD
         self.traffic_light:TrafficLight|None = None
         self.car_queue = car_queue
 
 class Car:
     def __init__(self, env: simpy.Environment, name: str, road: Road, roads: list[Road], reaction_time=1, acceleration = 3.5, deccelaration = -8.1, length = 4.9) -> None:
+=======
+        self.traffic_light = None
+        self.car_queue = car_queue
+
+class Car:
+    def __init__(self, env: simpy.Environment, name: str, road: Road, roads: list[Road], reaction_time=1) -> None:
+>>>>>>> a7419b5 (Updating to brandon's work)
         self.env = env
         self.name = name
         self.road = road
         self.reaction_time = reaction_time
+<<<<<<< HEAD
         self.acceleration = acceleration
         self.decceleration = deccelaration
         self.speed = self.road.speed
         self.roads = roads
         self.junction_passes = 0
         self.length = length
+=======
+        self.roads = roads
+>>>>>>> a7419b5 (Updating to brandon's work)
 
     def run(self):
         distance = self.road.distance
@@ -98,13 +137,18 @@ class Car:
 
             with self.road.junction_start.queue.request(priority=1) as request:
                 yield request
+<<<<<<< HEAD
                 while self.road.traffic_light.colour == "RED" or self.road.car_queue.items[0] != self or not(any([(road.junction_start == self.road.junction_end and sum(car.length for car in road.car_queue.items)+self.length<road.distance)for road in self.roads ])):
+=======
+                while self.road.traffic_light.color == "RED" or self.road.car_queue.items[0] != self:
+>>>>>>> a7419b5 (Updating to brandon's work)
                     print(f"{self.name} waiting at red light in {self.road.junction_start.name} at {self.env.now}")
                     yield self.env.timeout(self.reaction_time)
 
                 car = yield self.road.car_queue.get()
                 if car == self:
                     print(f"{self.name} entering {self.road.junction_start.name} at {self.env.now}")
+<<<<<<< HEAD
                     self.junction_passes+=1
                     if self.road.junction_end.end:
                         break
@@ -176,3 +220,12 @@ class Car:
                     distance+=self.road.distance
         print(f"{self.name} leaving from {self.road.junction_start.name}")
 
+
+=======
+                    travel_time = self.road.distance / self.road.speed
+                    yield self.env.timeout(travel_time)
+
+                    # Update the road to the next road in the loop
+                    next_junction = self.road.junction_end
+                    self.road = random.choice([road for road in self.roads if road.junction_start == next_junction])
+>>>>>>> a7419b5 (Updating to brandon's work)

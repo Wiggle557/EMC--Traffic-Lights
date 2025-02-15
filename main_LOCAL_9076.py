@@ -10,7 +10,7 @@ def main():
     COLS = 2
     num_junctions = ROWS*COLS
     junction_names = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    junctions:list[Junction] = []
+    junctions = []
     roads = []
 
     # Create junctions
@@ -63,3 +63,4 @@ def main():
     print(total_passes)
 if __name__ == "__main__":
     main()
+
