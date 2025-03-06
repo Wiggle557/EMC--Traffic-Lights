@@ -5,37 +5,37 @@ from setup import setup
 def main():
     stats = SimulationStats()
     env = simpy.Environment()
+    num_junctions = 4
+    junction_names = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    junctions:list[Junction] = []
+    roads = []
 
     # Create junctions
-    junction_a = Junction(env, "Junction A")
-    junction_b = Junction(env, "Junction B")
-    junction_c = Junction(env, "Junction C")
-
-    # Create traffic lights
-    traffic_light_a = TrafficLight(env, red_time=20, green_time=20)
-    traffic_light_b = TrafficLight(env, red_time=15, green_time=15)
-    traffic_light_c = TrafficLight(env, red_time=10, green_time=10)
-
-    # Assign traffic lights to junctions
-    junction_a.set_traffic_light(traffic_light_a)
-    junction_b.set_traffic_light(traffic_light_b)
-    junction_c.set_traffic_light(traffic_light_c)
+    for i in range(num_junctions):
+        junctions.append(Junction(env, f"{junction_names[i]}"))
 
     # Create roads connecting junctions
-    road_ab = Road("Road AB", 6, 10, junction_a, junction_b)
-    road_bc = Road("Road BC", 5, 15, junction_b, junction_c)
-    road_ca = Road("Road CA", 7, 20, junction_c, junction_a)
+    road_names = [[0,1],[1,2],[2,0],[1,3],[0,2],[3,0]]
+    for name in road_names:
+        new_road = Road(f"Road {junctions[name[0]].name}{junctions[name[1]].name}",6,12,junctions[name[0]],junctions[name[1]],simpy.Store(env))
+        roads.append(new_road)
 
-    car_queue = simpy.Store(env)
+    # Create and assign traffic lights to roads
+    for road in roads:
+        road.traffic_light = TrafficLight(env, red_time=15, green_time=15)
+        road.traffic_light.name = road.name
+        road.junction_end.add_light(road.traffic_light)
 
     # Setup environment with cars
-    env.process(setup(env, 20, car_queue, [road_ab, road_bc, road_ca], (1, 20)))
+    env.process(setup(env, 20, roads, (1, 20)))
     env.run(until=180)
 
 
     print("Cars left in queue:")
-    for car in car_queue.items:
-        print(car.name)
+    for road in roads:
+        print(road.name)
+        for car in road.car_queue.items:
+            print(car.name)
 
 if __name__ == "__main__":
     main()
