@@ -11,25 +11,19 @@ def main():
 
     # Create junctions
     for i in range(num_junctions):
-        junctions.append(Junction(env, f"Junction {junction_names[i]}"))
+        junctions.append(Junction(env, f"{junction_names[i]}"))
 
     # Create roads connecting junctions
-    roads.append(Road("Road AB", 6, 12, junctions[0], junctions[1],simpy.Store(env))
-)
-    roads.append(Road("Road BC", 6, 12, junctions[1], junctions[2],simpy.Store(env))
-)
-    roads.append(Road("Road CA", 6, 12, junctions[2], junctions[0],simpy.Store(env))
-)
-    roads.append(Road("Road BD", 6, 12, junctions[1], junctions[3],simpy.Store(env))
-)
-    roads.append(Road("Road AC", 6, 12, junctions[0], junctions[2],simpy.Store(env))
-)
-    roads.append(Road("Road DC", 6, 12, junctions[3], junctions[2],simpy.Store(env))
-)
+    road_names = [[0,1],[1,2],[2,0],[1,3],[0,2],[3,0]]
+    for name in road_names:
+        new_road = Road(f"Road {junctions[name[0]].name}{junctions[name[1]].name}",6,12,junctions[name[0]],junctions[name[1]],simpy.Store(env))
+        roads.append(new_road)
 
     # Create and assign traffic lights to roads
     for road in roads:
         road.traffic_light = TrafficLight(env, red_time=15, green_time=15)
+        road.traffic_light.name = road.name
+        road.junction_end.add_light(road.traffic_light)
 
     # Setup environment with cars
     env.process(setup(env, 20, roads, (1, 20)))
@@ -43,3 +37,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
