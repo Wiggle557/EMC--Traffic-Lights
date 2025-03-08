@@ -1,6 +1,7 @@
 import simpy
 from models import TrafficLight, Road, Junction
 from setup import setup
+from display import display
 
 def main():
     env = simpy.Environment()
@@ -26,6 +27,7 @@ def main():
         road.junction_end.add_light(road.traffic_light)
 
     # Setup environment with cars
+    display(junctions,roads)
     env.process(setup(env, 20, roads, (1, 20)))
     env.run(until=180)
 
