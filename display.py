@@ -10,10 +10,10 @@ def set_node_roads(graph: nx.DiGraph, roads: list[Road]):
     """
     for road in roads:
         # Use custom logic to assign different colors to opposite edges
-        if road.traffic_light.colour=="RED":  # Example logic for color assignment
-            edge_color = "RED"  # Outgoing road
+        if road.traffic_light.colour=="RED":
+            edge_color = "red"
         else:
-            edge_color = "green"  # Incoming road
+            edge_color = "green"
 
         # Add each road as a directed edge with attributes
         graph.add_edge(
