@@ -7,17 +7,18 @@ def main():
     env = simpy.Environment()
     num_junctions = 4
     junction_names = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    junctions:list[Junction] = []
+    junctions = []
     roads = []
 
     # Create junctions
     for i in range(num_junctions):
         junctions.append(Junction(env, f"{junction_names[i]}"))
 
+    junctions.append(Junction(env,"OUT",end=True))
     # Create roads connecting junctions
-    road_names = [[0,1],[1,2],[2,0],[1,3],[0,2],[3,0]]
+    road_names = [[0, 1], [1, 2], [2, 0], [1, 3], [0, 2], [3, 0],[0,4],[2,4]]
     for name in road_names:
-        new_road = Road(f"Road {junctions[name[0]].name}{junctions[name[1]].name}",6,12,junctions[name[0]],junctions[name[1]],simpy.Store(env))
+        new_road = Road(f"Road {junctions[name[0]].name}{junctions[name[1]].name}", 6, 12, junctions[name[0]], junctions[name[1]], simpy.Store(env))
         roads.append(new_road)
 
     # Create and assign traffic lights to roads
@@ -26,10 +27,15 @@ def main():
         road.traffic_light.name = road.name
         road.junction_end.add_light(road.traffic_light)
 
-    # Setup environment with cars
-    display(junctions,roads)
+    # Initial display and store the layout
+    pos = display(junctions, roads)
+
+    # Run the simulation
     env.process(setup(env, 20, roads, (1, 20)))
     env.run(until=180)
+
+    # Display the graph again using the same layout
+    display(junctions, roads, pos)
 
     print("Cars left in queue:")
     for road in roads:

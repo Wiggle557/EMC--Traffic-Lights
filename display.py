@@ -1,4 +1,3 @@
-
 from models import Road
 import networkx as nx
 import matplotlib.pyplot as plt
@@ -10,7 +9,7 @@ def set_node_roads(graph: nx.DiGraph, roads: list[Road]):
     """
     for road in roads:
         # Use custom logic to assign different colors to opposite edges
-        if road.traffic_light.colour=="RED":
+        if road.traffic_light.colour == "RED":
             edge_color = "red"
         else:
             edge_color = "green"
@@ -25,9 +24,7 @@ def set_node_roads(graph: nx.DiGraph, roads: list[Road]):
         )
     return graph
 
-
-
-def display(junctions, roads):
+def display(junctions, roads, pos=None):
     """
     Display the graph of junctions and roads with directed edges for traffic flow visualization.
     """
@@ -47,8 +44,9 @@ def display(junctions, roads):
     # Define edge labels (road names)
     edge_labels = dict([((u, v), d["label"]) for u, v, d in graph.edges(data=True)])
 
-    # Layout for the graph
-    pos = nx.spring_layout(graph)  # Use a spring layout for better visualization
+    # Use the provided layout or create a new one
+    if pos is None:
+        pos = nx.spring_layout(graph, seed=41)  # Use a fixed seed for consistent layouts
 
     # Offset edges for better visualization of two-way roads
     curved_edges = []
@@ -57,25 +55,20 @@ def display(junctions, roads):
             curved_edges.append((u, v))  # Mark curved edges for two-way roads
 
     # Draw nodes and labels
-    nx.draw_networkx_nodes(graph, pos, cmap=plt.get_cmap("jet"), node_color=values, node_size=1500)
-    nx.draw_networkx_labels(graph, pos)
+    nx.draw_networkx_nodes(graph, pos, cmap=plt.get_cmap("jet"), node_color=values, node_size=800)
+    nx.draw_networkx_labels(graph, pos, font_color="white")
 
     # Draw edges with curved lines for two-way roads
     for u, v in curved_edges:
         # Draw curved edge for one direction
         nx.draw_networkx_edges(
             graph, pos, edgelist=[(u, v)], connectionstyle="arc3,rad=0.2",
-            edge_color=graph[u][v]["color"], arrowstyle="->", width=2
-        )
-        # Draw curved edge for the reverse direction
-        nx.draw_networkx_edges(
-            graph, pos, edgelist=[(v, u)], connectionstyle="arc3,rad=-0.2",
-            edge_color=graph[v][u]["color"], arrowstyle="->", width=2
+            edge_color=graph[u][v]["color"], arrowstyle="->", arrowsize=25, width=2
         )
 
     # Draw the remaining straight edges (not overlapping)
     straight_edges = [edge for edge in graph.edges() if edge not in curved_edges and (edge[1], edge[0]) not in curved_edges]
-    nx.draw_networkx_edges(graph, pos, edgelist=straight_edges, arrowstyle="->", edge_color=edge_colors, width=2)
+    nx.draw_networkx_edges(graph, pos, edgelist=straight_edges, arrowstyle="->", arrowsize=25, edge_color=edge_colors, width=2)
 
     # Draw unique edge labels for each road, offset for two-way roads
     for (u, v), label in edge_labels.items():
@@ -89,3 +82,5 @@ def display(junctions, roads):
     plt.title("Traffic Network with Two-Way Roads and Different Colors")
     plt.show()
 
+    # Return the layout for reuse
+    return pos
