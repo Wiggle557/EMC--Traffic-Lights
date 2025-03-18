@@ -11,13 +11,14 @@ class TrafficLight:
 
 
 class Junction:
-    def __init__(self, env: simpy.Environment, name: str):
+    def __init__(self, env: simpy.Environment, name: str, end:bool = False):
         self.env = env
         self.name = name
         self.action = env.process(self.run())
         self.queue = simpy.PriorityResource(env, capacity=1)
-        self.traffic_lights = []
+        self.traffic_lights: list[TrafficLight] = []
         self.counter = 0
+        self.end = end
 
     def add_light(self, light):
         self.counter += 1
@@ -33,10 +34,11 @@ class Junction:
                 if light.colour == "RED":
                     light.colour = "GREEN"
                     print(f"Light at {light.name} turns green at {self.env.now}")
+                    yield self.env.timeout(light.green_time)
                 else:
                     light.colour = "RED"
                     print(f"Light at {light.name} turns red at {self.env.now}")
-            yield self.env.timeout(15)
+                    yield self.env.timeout(light.red_time)
 
 
 
@@ -72,6 +74,9 @@ class Car:
                 car = yield self.road.car_queue.get()
                 if car == self:
                     print(f"{self.name} entering {self.road.junction_start.name} at {self.env.now}")
+                    if self.road.junction_end.end:
+                        break
+
                     travel_time = self.road.distance / self.road.speed
                     yield self.env.timeout(travel_time/2)
                     print(f"{self.name} driving on {self.road.name}")
@@ -80,5 +85,6 @@ class Car:
                     # Update the road to the next road in the loop
                     next_junction = self.road.junction_end
                     self.road = random.choice([road for road in self.roads if road.junction_start == next_junction])
+        print(f"{self.name} leaving from {self.road.junction_start.name}")
 
 
