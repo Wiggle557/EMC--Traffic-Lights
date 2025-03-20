@@ -2,31 +2,44 @@ import simpy
 import random
 
 class TrafficLight:
-    def __init__(self, env: simpy.Environment, red_time=10, green_time=10, colour = "GREEN"):
+    def __init__(self, env: simpy.Environment, red_time=10, green_time=10, colour="GREEN"):
         self.env = env
         self.colour = colour
         self.red_time = red_time
         self.green_time = green_time
         self.name = ""
+        self.action = env.process(self.run())  # Start the traffic light process
+
+    def run(self):
+        """
+        SimPy process to independently manage the state of the traffic light.
+        """
+        while True:
+            if self.colour == "RED":
+                self.colour = "GREEN"
+                print(f"Light at {self.name} turns GREEN at {self.env.now}")
+                yield self.env.timeout(self.green_time)
+            else:
+                self.colour = "RED"
+                print(f"Light at {self.name} turns RED at {self.env.now}")
+                yield self.env.timeout(self.red_time)
+
 
 
 class Junction:
-    def __init__(self, env: simpy.Environment, name: str, end:bool = False):
+    def __init__(self, env: simpy.Environment, name: str, end: bool = False):
         self.env = env
         self.name = name
-        self.action = env.process(self.run())
-        self.queue = simpy.PriorityResource(env, capacity=1)
         self.traffic_lights: list[TrafficLight] = []
-        self.counter = 0
+        self.queue = simpy.PriorityResource(env, capacity=1)
         self.end = end
 
     def add_light(self, light):
-        self.counter += 1
-        if self.counter % 2 == 0:
-            light.colour = "RED"
-        else:
-            light.colout = "GREEN"
+        """
+        Add a traffic light to the junction.
+        """
         self.traffic_lights.append(light)
+
 
     def run(self):
         while True:

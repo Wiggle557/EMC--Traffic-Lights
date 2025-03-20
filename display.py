@@ -38,7 +38,7 @@ def update(env, graph, roads, pos, ax):
     edge_colors = [d["color"] for _, _, d in graph.edges(data=True)]
     edge_labels = dict([((u, v), d["label"]) for u, v, d in graph.edges(data=True)])
 
-    # Identify curved edges for two-way roads
+    # Offset edges for better visualization of two-way roads
     curved_edges = []
     for u, v, d in graph.edges(data=True):
         if graph.has_edge(v, u):  # Curved edges exist if reverse direction exists
@@ -46,20 +46,17 @@ def update(env, graph, roads, pos, ax):
 
     # Identify straight edges (not part of two-way roads)
     straight_edges = [
-        edge for edge in graph.edges() 
+        edge for edge in graph.edges()
         if edge not in curved_edges and (edge[1], edge[0]) not in curved_edges
     ]
 
-    # **Draw nodes**
-    nx.draw_networkx_nodes(graph, pos, ax=ax, cmap=plt.get_cmap("jet"), node_size=800, node_color="lightblue")
-    nx.draw_networkx_labels(graph, pos, ax=ax, font_color="black")
+    # **Draw nodes (identical to display)**
+    nx.draw_networkx_nodes(graph, pos, cmap=plt.get_cmap("jet"), node_size=800, node_color="lightblue")
+    nx.draw_networkx_labels(graph, pos, font_color="black")
 
-    # **Draw straight edges first**
-    nx.draw_networkx_edges(
-        graph, pos, ax=ax, edgelist=straight_edges, edge_color=edge_colors, arrowstyle="->", width=2
-    )
-
-    # **Draw curved edges on top**
+    # **Draw straight edges (identical to display)**
+    nx.draw_networkx_edges(graph, pos, edgelist=straight_edges, edge_color=edge_colors, arrowstyle="->", arrowsize=20, width=2)
+    # **Draw curved edges (identical to display)**
     for u, v in curved_edges:
         # Curved edge for one direction
         nx.draw_networkx_edges(
@@ -72,22 +69,15 @@ def update(env, graph, roads, pos, ax):
             edge_color=graph[v][u]["color"], arrowstyle="->", arrowsize=20, width=2
         )
 
-    # Draw edge labels
-    nx.draw_networkx_edge_labels(graph, pos, edge_labels=edge_labels, ax=ax, font_size=8)
+    # Draw edge labels (identical to display)
+    nx.draw_networkx_edge_labels(graph, pos, edge_labels=edge_labels, font_size=8)
 
     # Update the title with the current simulation time
     ax.set_title(f"Traffic Network at Simulation Time: {env.now}")
 
     # Refresh the graph display
     plt.pause(0.1)
-    # Draw edge labels
-    nx.draw_networkx_edge_labels(graph, pos, edge_labels=edge_labels, ax=ax, font_size=8)
 
-    # Update the title with the current simulation time
-    ax.set_title(f"Traffic Network at Simulation Time: {env.now}")
-
-    # Refresh the graph display
-    plt.pause(0.1)  # Short pause for animation
 
 def animate_graph(env, junctions, roads, pos=None):
     """
