@@ -1,31 +1,46 @@
 import simpy
 import random
+import math
 
 class TrafficLight:
-    def __init__(self, env: simpy.Environment, red_time=10, green_time=10, colour = "GREEN"):
+    def __init__(self, env: simpy.Environment, red_time=10, green_time=10, colour="GREEN"):
         self.env = env
         self.colour = colour
         self.red_time = red_time
         self.green_time = green_time
         self.name = ""
+        self.action = env.process(self.run())  # Start the traffic light process
+
+    def run(self):
+        """
+        SimPy process to independently manage the state of the traffic light.
+        """
+        while True:
+            if self.colour == "RED":
+                self.colour = "GREEN"
+                print(f"Light at {self.name} turns GREEN at {self.env.now}")
+                yield self.env.timeout(self.green_time)
+            else:
+                self.colour = "RED"
+                print(f"Light at {self.name} turns RED at {self.env.now}")
+                yield self.env.timeout(self.red_time)
+
 
 
 class Junction:
-    def __init__(self, env: simpy.Environment, name: str):
+    def __init__(self, env: simpy.Environment, name: str, end: bool = False):
         self.env = env
         self.name = name
-        self.action = env.process(self.run())
+        self.traffic_lights: list[TrafficLight] = []
         self.queue = simpy.PriorityResource(env, capacity=1)
-        self.traffic_lights = []
-        self.counter = 0
+        self.end = end
 
     def add_light(self, light):
-        self.counter += 1
-        if self.counter % 2 == 0:
-            light.colour = "RED"
-        else:
-            light.colout = "GREEN"
+        """
+        Add a traffic light to the junction.
+        """
         self.traffic_lights.append(light)
+
 
     def run(self):
         while True:
@@ -33,10 +48,11 @@ class Junction:
                 if light.colour == "RED":
                     light.colour = "GREEN"
                     print(f"Light at {light.name} turns green at {self.env.now}")
+                    yield self.env.timeout(light.green_time)
                 else:
                     light.colour = "RED"
                     print(f"Light at {light.name} turns red at {self.env.now}")
-            yield self.env.timeout(15)
+                    yield self.env.timeout(light.red_time)
 
 
 
@@ -47,15 +63,18 @@ class Road:
         self.distance = distance
         self.junction_start = junction_start
         self.junction_end = junction_end
-        self.traffic_light = None
+        self.traffic_light:TrafficLight|None = None
         self.car_queue = car_queue
 
 class Car:
-    def __init__(self, env: simpy.Environment, name: str, road: Road, roads: list[Road], reaction_time=1) -> None:
+    def __init__(self, env: simpy.Environment, name: str, road: Road, roads: list[Road], reaction_time=1, acceleration = 3.5, deccelaration = -8.1, ) -> None:
         self.env = env
         self.name = name
         self.road = road
         self.reaction_time = reaction_time
+        self.acceleration = acceleration
+        self.decceleration = deccelaration
+        self.speed = self.road.speed
         self.roads = roads
 
     def run(self):
@@ -72,7 +91,45 @@ class Car:
                 car = yield self.road.car_queue.get()
                 if car == self:
                     print(f"{self.name} entering {self.road.junction_start.name} at {self.env.now}")
-                    travel_time = self.road.distance / self.road.speed
+                    if self.road.junction_end.end:
+                        break
+                    # TODO: Check Light for deccel
+                    # Figure out time for journey not at speed limit
+                    if self.road.traffic_light.colour=="GREEN":
+                        v_max = math.sqrt(self.speed**2+2*self.acceleration*self.road.distance)
+                        if v_max <= self.road.speed:
+                            total_t = (v_max-self.speed)/self.acceleration
+                            self.speed=v_max
+                        else:
+                            s_1 = (self.road.speed**2-self.speed**2)/(2*self.acceleration)
+                            # TODO: finish s_c;
+                            # light = green
+                            # reaches limit
+                            s_c = self.road.distance-s_1
+                            t_1 = (self.road.speed-self.speed)/(self.acceleration)
+                            t_c = s_c/self.road.speed
+                            total_t = t_1+t_c
+                            self.speed = self.road.speed
+                    else:
+                        final_v = 0
+                        v_p = math.sqrt(self.decceleration*self.speed**2-self.acceleration**final_v+2*self.acceleration*self.decceleration)/(self.decceleration-self.acceleration)
+                        if v_p>self.road.speed:
+                            s_1 = (self.road.speed**2-self.speed**2)/(2*self.acceleration)
+                            s_2 = (final_v-self.road.speed**2)/(2*self.decceleration)
+                            s_c = self.road.distance-s_1-s_2
+                            t_1 = (self.road.speed-self.speed)/self.acceleration
+                            t_c = s_c/self.road.speed
+                            t_2 = (self.road.speed-final_v)/self.decceleration
+                            total_t = t_1+t_c+t_2
+                        else:
+                            t_1 = (v_p-self.speed)/self.acceleration
+                            t_2 = (final_v-v_p)/self.decceleration
+                            total_t = t_1+t_2
+                        self.speed=0
+                        
+
+                    travel_time = total_t
+
                     yield self.env.timeout(travel_time/2)
                     print(f"{self.name} driving on {self.road.name}")
                     yield self.env.timeout(travel_time/2)
@@ -80,5 +137,6 @@ class Car:
                     # Update the road to the next road in the loop
                     next_junction = self.road.junction_end
                     self.road = random.choice([road for road in self.roads if road.junction_start == next_junction])
+        print(f"{self.name} leaving from {self.road.junction_start.name}")
 
 
