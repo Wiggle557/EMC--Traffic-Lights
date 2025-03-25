@@ -9,7 +9,7 @@ def set_node_roads(graph: nx.DiGraph, roads: list[Road]):
     """
     for road in roads:
         # Assign edge colors based on traffic light states
-        edge_color = "red" if road.traffic_light.colour == "RED" else "green"
+        edge_color = road.traffic_light.colour.lower() if "AMBER" not in road.traffic_light.colour else "yellow" if road.traffic_light.colour == "AMBER" else "orange"
 
         # Add a directed edge for the road with the relevant attributes
         graph.add_edge(
@@ -30,7 +30,7 @@ def update(env, graph, roads, pos, ax):
 
     # Update edge attributes (colors, weights) based on traffic light state
     for road in roads:
-        edge_color = "red" if road.traffic_light.colour == "RED" else "green"
+        edge_color = road.traffic_light.colour.lower() if "AMBER" not in road.traffic_light.colour else "yellow" if road.traffic_light.colour == "AMBER" else "orange"
         graph[road.junction_start.name][road.junction_end.name]["color"] = edge_color
         graph[road.junction_start.name][road.junction_end.name]["weight"] = len(road.car_queue.items)
 
