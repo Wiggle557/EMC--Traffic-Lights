@@ -5,9 +5,10 @@ from display import animate_graph, display
 import networkx as nx
 
 def main():
+    # TODO: cars take a distance
     env = simpy.Environment()
-    ROWS = 3
-    COLS = 3
+    ROWS = 2
+    COLS = 2
     num_junctions = ROWS*COLS
     junction_names = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     junctions = []
@@ -41,24 +42,26 @@ def main():
         road.junction_end.add_light(road.traffic_light)
 
     # Add simulation processes
-    env.process(setup(env, 20, roads, (1, 20)))
+    env.process(setup(env, 20, roads, 9))
 
     # Animate the graph with environment updates
-    animate_graph(env, junctions, roads)
+    #animate_graph(env, junctions, roads)
 
     # Run the simulation
     env.run(until=180)
 
     # Final static display of the graph
     pos = nx.spring_layout(nx.DiGraph())
-    display(junctions, roads, pos)
+    #display(junctions, roads, pos)
 
     print("Cars left in queue:")
+    total_passes = 0
     for road in roads:
         print(road.name)
         for car in road.car_queue.items:
             print(car.name)
-
+            total_passes += car.junction_passes
+    print(total_passes)
 if __name__ == "__main__":
     main()
 

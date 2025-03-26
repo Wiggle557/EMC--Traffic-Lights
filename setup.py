@@ -1,8 +1,9 @@
 from models import Car, Road
 import simpy
 import random
+import numpy as np
 
-def setup(env: simpy.Environment, num_cars: int, roads: list[Road], interval: tuple[int, int]):
+def setup(env: simpy.Environment, num_cars: int, roads: list[Road], mean: float|int):
     """
     Sets up the roads and runs cars through the roads
 
@@ -17,7 +18,7 @@ def setup(env: simpy.Environment, num_cars: int, roads: list[Road], interval: tu
         road = random.choice([i for i in roads if not i.junction_end.end])
         car = Car(env, f'Car {i}', road, roads, random.randint(1, 6))
         env.process(car.run())
-        yield env.timeout(random.randint(*interval))
+        yield env.timeout(np.random.poisson(lam=mean, size=1)[0])
 
 def create_grid_roads(junctions: list[list[int]])->list[list[int|str]]:
     road_names:list[list[int|str]] = []
