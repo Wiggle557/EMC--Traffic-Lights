@@ -88,6 +88,7 @@ class Car:
         self.decceleration = deccelaration
         self.speed = self.road.speed
         self.roads = roads
+        self.junction_passes = 0
 
     def run(self):
         while True:
@@ -103,13 +104,9 @@ class Car:
                 car = yield self.road.car_queue.get()
                 if car == self:
                     print(f"{self.name} entering {self.road.junction_start.name} at {self.env.now}")
+                    self.junction_passes+=1
                     if self.road.junction_end.end:
                         break
-                    # TODO: Check time with deccel and time without deccel
-                    # if can get to light without deccel
-                    # else use time with deccel
-                    # include amber changes
-                    #if self.road.traffic_light.colour!="RED":
                     v_max = math.sqrt(self.speed**2+2*self.acceleration*self.road.distance)
                     if v_max <= self.road.speed:
                         total_tG = (v_max-self.speed)/self.acceleration
