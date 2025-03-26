@@ -19,3 +19,20 @@ def setup(env: simpy.Environment, num_cars: int, roads: list[Road], interval: tu
         env.process(car.run())
         yield env.timeout(random.randint(*interval))
 
+def create_grid_roads(junctions: list[list[int]])->list[list[int|str]]:
+    road_names:list[list[int|str]] = []
+    for i, row in enumerate(junctions):
+        for j, cell in enumerate(row):
+            if i>0:
+                road_names.append([cell,cell-len(row),"RED"])
+            if i<len(row)-1:
+                road_names.append([cell,cell+len(row),"RED"])
+            if j>0:
+                road_names.append([cell,cell-1,"GREEN"])
+            if j<len(row)-1:
+                road_names.append([cell,cell+1,"GREEN"])
+            print(cell)
+    return road_names
+
+
+            
