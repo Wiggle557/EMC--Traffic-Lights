@@ -5,7 +5,6 @@ from display import animate_graph, display
 import networkx as nx
 
 def main():
-    # TODO: cars take a distance
     env = simpy.Environment()
     ROWS = 2
     COLS = 2
@@ -32,12 +31,12 @@ def main():
     road_names = create_grid_roads(junc_grid)
     print(road_names)
     for name in road_names:
-        new_road = Road(f"Road {junctions[name[0]].name}{junctions[name[1]].name}", 6, 12, junctions[name[0]], junctions[name[1]], simpy.Store(env))
+        new_road = Road(f"Road {junctions[name[0]].name}{junctions[name[1]].name}", 13, 100, junctions[name[0]], junctions[name[1]], simpy.Store(env))
         roads.append(new_road)
 
     # Create and assign traffic lights to roads
     for i, road in enumerate(roads):
-        road.traffic_light = TrafficLight(env, red_time=15, green_time=15, colour=road_names[i][2])
+        road.traffic_light = TrafficLight(env, red_time=15, green_time=15, amber_time=3, red_amber_time=3, colour=road_names[i][2])
         road.traffic_light.name = road.name
         road.junction_end.add_light(road.traffic_light)
 
@@ -51,7 +50,7 @@ def main():
     env.run(until=180)
 
     # Final static display of the graph
-    pos = nx.spring_layout(nx.DiGraph())
+    #pos = nx.spring_layout(nx.DiGraph())
     #display(junctions, roads, pos)
 
     print("Cars left in queue:")
