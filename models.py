@@ -79,7 +79,7 @@ class Road:
         self.car_queue = car_queue
 
 class Car:
-    def __init__(self, env: simpy.Environment, name: str, road: Road, roads: list[Road], reaction_time=1, acceleration = 3.5, deccelaration = -8.1, ) -> None:
+    def __init__(self, env: simpy.Environment, name: str, road: Road, roads: list[Road], reaction_time=1, acceleration = 3.5, deccelaration = -8.1, length = 4.9) -> None:
         self.env = env
         self.name = name
         self.road = road
@@ -89,15 +89,17 @@ class Car:
         self.speed = self.road.speed
         self.roads = roads
         self.junction_passes = 0
+        self.length = length
 
     def run(self):
+        distance = self.road.distance
         while True:
             print(f"{self.name} arriving at {self.road.junction_start.name} at {self.env.now}")
             yield self.road.car_queue.put(self)
 
             with self.road.junction_start.queue.request(priority=1) as request:
                 yield request
-                while self.road.traffic_light.colour == "RED" or self.road.car_queue.items[0] != self:
+                while self.road.traffic_light.colour == "RED" or self.road.car_queue.items[0] != self or not(any([(road.junction_start == self.road.junction_end and sum(car.length for car in road.car_queue.items)+self.length<road.distance)for road in self.roads ])):
                     print(f"{self.name} waiting at red light in {self.road.junction_start.name} at {self.env.now}")
                     yield self.env.timeout(self.reaction_time)
 
@@ -107,24 +109,27 @@ class Car:
                     self.junction_passes+=1
                     if self.road.junction_end.end:
                         break
-                    v_max = math.sqrt(self.speed**2+2*self.acceleration*self.road.distance)
+                    for i in self.road.car_queue.items:
+                        distance -= i.length
+                    print(distance)
+                    
+                    v_max = math.sqrt(self.speed**2+2*self.acceleration*distance)
                     if v_max <= self.road.speed:
                         total_tG = (v_max-self.speed)/self.acceleration
                         new_speed=v_max
                     else:
                         s_1 = (self.road.speed**2-self.speed**2)/(2*self.acceleration)
-                        s_c = self.road.distance-s_1
+                        s_c = distance-s_1
                         t_1 = (self.road.speed-self.speed)/(self.acceleration)
                         t_c = s_c/self.road.speed
                         total_tG = t_1+t_c
                         new_speed = self.road.speed
-                    #else:
                     final_v = 0
                     v_p = math.sqrt((self.decceleration*self.speed**2-self.acceleration*final_v**2+2*self.acceleration*self.decceleration)/(self.decceleration-self.acceleration))
                     if v_p>self.road.speed:
                         s_1 = (self.road.speed**2-self.speed**2)/(2*self.acceleration)
                         s_2 = (final_v-self.road.speed**2)/(2*self.decceleration)
-                        s_c = self.road.distance-s_1-s_2
+                        s_c = distance-s_1-s_2
                         t_1 = (self.road.speed-self.speed)/self.acceleration
                         t_c = s_c/self.road.speed
                         t_2 = (self.road.speed-final_v)/self.decceleration
@@ -163,9 +168,13 @@ class Car:
                     print(f"{self.name} driving on {self.road.name}")
                     yield self.env.timeout(travel_time/2)
 
+                    distance = 0
+                    for i in self.road.car_queue.items:
+                        distance += i.length
                     # Update the road to the next road in the loop
                     next_junction = self.road.junction_end
-                    self.road = random.choice([road for road in self.roads if road.junction_start == next_junction])
+                    self.road = random.choice([road for road in self.roads if (road.junction_start == next_junction and sum(car.length for car in road.car_queue.items)+self.length<road.distance)])
+                    distance+=self.road.distance
         print(f"{self.name} leaving from {self.road.junction_start.name}")
 
 
