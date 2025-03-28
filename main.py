@@ -99,12 +99,6 @@ def main():
     print(f"Total Junction Passes: {total_passes}")
 
 if __name__ == "__main__":
-    single_run = False  # Set to True for a single run, False for multiple runs
+    single_run = True  # Set to True for a single run, False for multiple runs
     if single_run:
         main()
-    else:
-        total_runs = 500
-        total_passes = 0
-        for _ in range(total_runs):
-            total_passes += quiet_main()
-        print(f"Average Junction Passes: {total_passes / total_runs}")
