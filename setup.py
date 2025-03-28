@@ -15,7 +15,7 @@ def setup(env: simpy.Environment, num_cars: int, roads: list[Road], mean: float|
     interval (tuple[int, int]): Range of times between when new cars appear on the roads
     """
     for i in range(num_cars):
-        road = random.choice([i for i in roads if not i.junction_end.end])
+        road = random.choice([i for i in roads if i.junction_start.start])
         car = Car(env, f'Car {i}', road, roads, random.randint(1, 6))
         env.process(car.run())
         yield env.timeout(np.random.poisson(lam=mean, size=1)[0])

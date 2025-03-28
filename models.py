@@ -1,70 +1,87 @@
+from __future__ import annotations
 import simpy
 import random
 import math
 
 class TrafficLight:
-    def __init__(self, env: simpy.Environment, red_time=10, green_time=10, red_amber_time = 3, amber_time = 3, colour="GREEN"):
+    def __init__(self, env: simpy.Environment, road: Road, red_time=10, green_time=10, red_amber_time=3, amber_time=3, colour="RED"):
         self.env = env
+        self.road = road  # Associate the traffic light with a specific road
         self.colour = colour
         self.red_time = red_time
         self.green_time = green_time
         self.red_amber_time = red_amber_time
         self.amber_time = amber_time
         self.last_change = env.now
-        self.name = ""
+        self.name = road.name  # Name the light after the road it controls
         self.action = env.process(self.run())  # Start the traffic light process
+        self.total_time = red_time + green_time + red_amber_time + amber_time
+
+    def actuate_timing(self):
+        """Adjust green time dynamically based on queue length."""
+        queue_length = self.road.get_queue_length()  # Get the current queue length
+        self.green_time = min(10 + queue_length * 2, 30)  # Increase green time proportionally to the queue
 
     def run(self):
-        """
-        SimPy process to independently manage the state of the traffic light.
-        """
+        """SimPy process to manage the traffic light cycle."""
         while True:
             self.last_change = self.env.now
+
+            # Adjust timings dynamically for GREEN light
+            self.actuate_timing()
+
+            # Traffic light state transitions
             if self.colour == "RED":
                 self.colour = "RAMBER"
-                print(f"Light at {self.name} turns RED AMBER at {self.env.now}")
+                print(f"Light at {self.name} turns RED-AMBER at {self.env.now}")
                 yield self.env.timeout(self.red_amber_time)
+            elif self.colour == "RAMBER":
+                self.colour = "GREEN"
+                print(f"Light at {self.name} turns GREEN at {self.env.now} for {self.green_time} seconds")
+                yield self.env.timeout(self.green_time)
             elif self.colour == "GREEN":
                 self.colour = "AMBER"
                 print(f"Light at {self.name} turns AMBER at {self.env.now}")
                 yield self.env.timeout(self.amber_time)
-            elif self.colour == "RAMBER":
-                self.colour = "GREEN"
-                print(f"Light at {self.name} turns GREEN at {self.env.now}")
-                yield self.env.timeout(self.green_time)
-            else:
+            else:  # "AMBER"
                 self.colour = "RED"
                 print(f"Light at {self.name} turns RED at {self.env.now}")
                 yield self.env.timeout(self.red_time)
 
 
-
 class Junction:
-    def __init__(self, env: simpy.Environment, name: str, end: bool = False):
+    def __init__(self, env: simpy.Environment, name: str, end: bool = False, start: bool = False, weight=1):
         self.env = env
         self.name = name
         self.traffic_lights: list[TrafficLight] = []
         self.queue = simpy.PriorityResource(env, capacity=1)
         self.end = end
+        self.start = start
+        self.weight = weight
+        self.action = env.process(self.actuate_lights())  # Start the actuation process
 
-    def add_light(self, light):
-        """
-        Add a traffic light to the junction.
-        """
+    def add_light(self, light: 'TrafficLight'):
+        """Add a traffic light to the junction."""
         self.traffic_lights.append(light)
 
-
-    def run(self):
+    def actuate_lights(self):
+        """Periodically adjust traffic light timings based on road queue lengths."""
         while True:
+            if self.start:
+                break  # Exit if this is a starting junction
+            # Identify the traffic light with the longest queue
+            max_queue_light = max(self.traffic_lights, key=lambda light: light.road.get_queue_length())
+            max_queue = max_queue_light.road.get_queue_length()
+            print(f"Junction {self.name}: Prioritizing {max_queue_light.name} with queue length {max_queue}")
+
+            # Adjust green time for the traffic light with the longest queue
             for light in self.traffic_lights:
-                if light.colour == "RED":
-                    light.colour = "GREEN"
-                    print(f"Light at {light.name} turns green at {self.env.now}")
-                    yield self.env.timeout(light.green_time)
+                if light == max_queue_light:
+                    light.green_time = min(15 + max_queue * 2, 30)  # Example: max green time is 30 seconds
                 else:
-                    light.colour = "RED"
-                    print(f"Light at {light.name} turns red at {self.env.now}")
-                    yield self.env.timeout(light.red_time)
+                    light.green_time = 15  # Default green time for non-prioritized roads
+
+            yield self.env.timeout(5)  # Reassess every 5 seconds
 
 
 class Road:
@@ -74,8 +91,12 @@ class Road:
         self.distance = distance
         self.junction_start = junction_start
         self.junction_end = junction_end
-        self.traffic_light:TrafficLight|None = None
+        self.traffic_light: TrafficLight | None = None  # Assign traffic light later
         self.car_queue = car_queue
+
+    def get_queue_length(self):
+        """Retrieve the current queue length on the road."""
+        return len(self.car_queue.items)
 
 class Car:
     def __init__(self, env: simpy.Environment, name: str, road: Road, roads: list[Road], reaction_time=1, acceleration = 3.5, deccelaration = -8.1, length = 4.9) -> None:
@@ -107,6 +128,7 @@ class Car:
                     print(f"{self.name} entering {self.road.junction_start.name} at {self.env.now}")
                     self.junction_passes+=1
                     if self.road.junction_end.end:
+                        self.road.car_queue.put(self)
                         break
                     for i in self.road.car_queue.items:
                         distance -= i.length
@@ -172,7 +194,12 @@ class Car:
                         distance += i.length
                     # Update the road to the next road in the loop
                     next_junction = self.road.junction_end
-                    self.road = random.choice([road for road in self.roads if (road.junction_start == next_junction and sum(car.length for car in road.car_queue.items)+self.length<road.distance)])
+                    possible_roads = [road for road in self.roads if road.junction_start == next_junction and sum(car.length for car in road.car_queue.items)+self.length<road.distance and not road.junction_end.start]
+                    weights = [road.junction_end.weight for road in possible_roads]
+                    total_weight = sum(weights)
+                    probabilities = [weight / total_weight for weight in weights]
+                    # Select the next road based on the weights
+                    self.road = random.choices(possible_roads, probabilities)[0]
                     distance+=self.road.distance
         print(f"{self.name} leaving from {self.road.junction_start.name}")
 
