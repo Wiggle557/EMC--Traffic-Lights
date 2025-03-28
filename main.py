@@ -2,6 +2,7 @@ import simpy
 from models import TrafficLight, Road, Junction
 from setup import setup, create_grid_roads
 from display import animate_graph, display
+from quiet import quiet_main
 import networkx as nx
 
 def main():
@@ -97,6 +98,13 @@ def main():
             total_passes += car.junction_passes
     print(f"Total Junction Passes: {total_passes}")
 
-
 if __name__ == "__main__":
-    main()
+    single_run = False  # Set to True for a single run, False for multiple runs
+    if single_run:
+        main()
+    else:
+        total_runs = 500
+        total_passes = 0
+        for _ in range(total_runs):
+            total_passes += quiet_main()
+        print(f"Average Junction Passes: {total_passes / total_runs}")

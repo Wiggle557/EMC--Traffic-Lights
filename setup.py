@@ -32,7 +32,6 @@ def create_grid_roads(junctions: list[list[int]])->list[list[int|str]]:
                 road_names.append([cell,cell-1,"GREEN"])
             if j<len(row)-1:
                 road_names.append([cell,cell+1,"GREEN"])
-            print(cell)
     return road_names
 
 
