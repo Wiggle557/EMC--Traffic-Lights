@@ -10,8 +10,8 @@ def main():
     env = simpy.Environment()
 
     # Grid size for junctions
-    ROWS = 2
-    COLS = 2
+    ROWS = 3
+    COLS = 3
     num_junctions = ROWS * COLS
     junction_names = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     junctions:list[Junction] = []

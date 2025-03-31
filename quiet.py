@@ -206,15 +206,15 @@ def quiet_main():
     env = simpy.Environment()
 
     # Grid size for junctions
-    ROWS = 2
-    COLS = 2
+    ROWS = 3
+    COLS = 3
     until = 180
     num_junctions = ROWS * COLS
     junction_names = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     junctions:list[FJunction] = []
     roads = []
 
-    weights = [[(i + j) % 2 for j in range(COLS)] for i in range(ROWS)]
+    weights = [[(i + j) % ROWS for j in range(COLS)] for i in range(ROWS)]
     # Create junctions
     for i in range(num_junctions):
         junctions.append(FJunction(env, f"{junction_names[i]}", weight=weights[i // COLS][i % COLS]))
