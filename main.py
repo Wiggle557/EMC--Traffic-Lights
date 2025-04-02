@@ -4,6 +4,29 @@ from qsetup import Fsetup, Fcreate_grid_roads
 import math
 import random
 
+import csv
+
+def export_timings_csv(timings, filename="final_timings.csv"):
+    """
+    Exports the final timing values to a CSV file.
+    
+    timings: dict mapping road name -> [red_time, green_time, amber_time, red_amber_time]
+    filename: Name of the CSV file.
+    """
+    fieldnames = ["road", "red_time", "green_time", "amber_time", "red_amber_time"]
+    with open(filename, "w", newline="") as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        for road, values in timings.items():
+            writer.writerow({
+                "road": road,
+                "red_time": values[0],
+                "green_time": values[1],
+                "amber_time": values[2],
+                "red_amber_time": values[3]
+            })
+
+# Example usage after your run loop:
 # ---------------------------
 # Helper: Compute weight from POI(s)
 # ---------------------------
@@ -168,6 +191,7 @@ if __name__ == "__main__":
                 timings[key][j] += val
     for key, values in timings.items():
         timings[key] = [val / total_runs for val in values]
+    export_timings_csv(timings, filename="final_timings.csv")
     
     print(f"Average Timings: {timings}")
     print(f"Average Junction Passes: {total_passes / total_runs}")

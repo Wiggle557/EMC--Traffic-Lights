@@ -2,6 +2,11 @@ from __future__ import annotations
 import simpy
 import random
 import math
+from scipy.stats import truncnorm
+
+def sample_reaction_time(mean=1.0, std=0.2, lower=0.5, upper=1.5):
+    a, b = (lower - mean) / std, (upper - mean) / std
+    return truncnorm.rvs(a, b, loc=mean, scale=std)
 
 
 class FTrafficLight:
@@ -138,37 +143,56 @@ class FRoad:
 
 
 class FCar:
-    def __init__(self, env: simpy.Environment, name: str, road: FRoad,
-                 roads: list[FRoad], reaction_time=1, acceleration=3.5, decceleration=-8.1, length=4.9):
+    def __init__(self, env, name, road, roads, reaction_time=1.0, acceleration=3.5, decceleration=-8.1, length=4.9):
         self.env = env
         self.name = name
-        self.road = road
-        self.reaction_time = reaction_time
-        self.acceleration = acceleration
-        self.decceleration = decceleration
-        self.speed = self.road.speed
-        self.roads = roads
-        self.junction_passes = 0
-        self.length = length
-        # For optional statistics
-        self.wait_time = 0
+        self.road = road            # Current road being traversed.
+        self.roads = roads          # List of possible roads (for routing at junctions).
+        self.reaction_time = reaction_time  # Base reaction time (in seconds).
+        self.acceleration = acceleration    # m/s² while speeding up.
+        self.decceleration = decceleration  # m/s² while slowing down.
+        self.length = length        # Length of the car (meters).
+        self.speed = self.road.speed  
+        
+        # Statistics trackers.
+        self.junction_passes = 0    # Count how many junctions the car has passed.
+        self.wait_time = 0          # Total accumulated waiting time (seconds).
 
     def run(self):
+        """
+        The main process for the car.
+        It repeatedly:
+          1. Joins the queue at its current road.
+          2. Waits until it is allowed to move (i.e. light is green and it is first in line).
+          3. Optionally introduces an extra start delay once conditions are favorable.
+          4. Computes travel time based on the physics of acceleration/deceleration,
+             then proceeds to the next road.
+        """
         distance = self.road.distance
         while True:
+            # Step 1: Car enters the queue at the start of the road.
             yield self.road.car_queue.put(self)
+            
+            # Step 2: Request access to the junction.
             with self.road.junction_start.queue.request(priority=1) as request:
                 yield request
-                # Apply a realistic reaction time by varying it slightly.
-                current_reaction = random.uniform(0.8, 1.2) * self.reaction_time
-                self.wait_time += current_reaction
-                while (self.road.traffic_light.colour in ["RED", "RAMBER", "AMBER"]
-                       or self.road.car_queue.items[0] != self
-                       or not any(
-                          (road.junction_start == self.road.junction_end and 
-                           sum(car.length for car in road.car_queue.items) + self.length < road.distance)
-                          for road in self.roads)):
-                    yield self.env.timeout(current_reaction)
+
+                # The car waits until both:
+                #   a. The traffic light shows a favorable signal (i.e., not RED, RAMBER, or AMBER).
+                #   b. The car is first in the queue.
+                while (self.road.traffic_light.colour in ["RED", "RAMBER", "AMBER"] or 
+                       self.road.car_queue.items[0] != self):
+                    # Instead of constant checking, we simulate a delay representing the driver re-checking.
+                    # Using a more realistic distribution (e.g., a truncated normal) is recommended.
+                    delay = sample_reaction_time(mean=1.0, std=0.2)  # Replace or adjust this as needed.
+                    self.wait_time += delay
+                    yield self.env.timeout(delay)
+                
+                # Step 3: Once conditions are met, simulate an extra start delay—the time 
+                # a driver takes once the light turns green before actually accelerating.
+                start_delay = sample_reaction_time(mean=0.8, std=0.1, lower=0.5, upper=1.0)
+                self.wait_time += start_delay
+                yield self.env.timeout(start_delay)
             car = yield self.road.car_queue.get()
             if car == self:
                 self.junction_passes += 1
