@@ -195,19 +195,24 @@ def generate_cars(env, num_cars, roads, base_mean):
 def initialize_population(pop_size):
     """
     Initialize a population of candidate timing solutions.
-    Each candidate is a dict with keys:
-      "red", "green", "amber", "red_amber".
     """
     population = []
     for _ in range(pop_size):
+        red = random.uniform(10, 20)
+        amber = random.uniform(2, 5)
+        red_amber = amber  # Assuming symmetry
+        max_green = red - (amber + red_amber) if red > (amber + red_amber) else 10
+        green = random.uniform(10, max_green)
+        
         candidate = {
-            "red": random.uniform(10, 20),
-            "green": random.uniform(10, 40),
-            "amber": random.uniform(2, 5),
-            "red_amber": random.uniform(2, 5)
+            "red": red,
+            "green": green,
+            "amber": amber,
+            "red_amber": red_amber
         }
         population.append(candidate)
     return population
+
 
 def evaluate_population(population):
     """
@@ -245,9 +250,6 @@ def crossover(parent1, parent2):
     return offspring
 
 def mutate(candidate, mutation_rate=0.1):
-    """
-    Mutate a candidate by perturbing each parameter.
-    """
     if random.random() < mutation_rate:
         candidate["red"] += random.uniform(-1, 1)
     if random.random() < mutation_rate:
@@ -256,11 +258,22 @@ def mutate(candidate, mutation_rate=0.1):
         candidate["amber"] += random.uniform(-0.5, 0.5)
     if random.random() < mutation_rate:
         candidate["red_amber"] += random.uniform(-0.5, 0.5)
+    
+    # Enforce symmetry for intermediary phases
+    candidate["red_amber"] = candidate["amber"]
+    
+    # Enforce green time limit
+    amber_total = candidate["amber"] + candidate["red_amber"]
+    max_green = candidate["red"] - amber_total if candidate["red"] > amber_total else 10
+    candidate["green"] = max(10, min(max_green, candidate["green"]))
+    
+    # Ensure parameters remain within bounds
     candidate["red"] = max(10, min(20, candidate["red"]))
     candidate["green"] = max(10, min(40, candidate["green"]))
     candidate["amber"] = max(2, min(5, candidate["amber"]))
-    candidate["red_amber"] = max(2, min(5, candidate["red_amber"]))
+    candidate["red_amber"] = candidate["amber"]
     return candidate
+
 
 def genetic_algorithm(pop_size=10, generations=5):
     """
@@ -316,7 +329,7 @@ def export_best_candidate_timings(candidate, roads, filename="best_candidate_tim
             })
 
 if __name__ == "__main__":
-    best_candidate = genetic_algorithm(pop_size=10, generations=5)
+    best_candidate = genetic_algorithm(pop_size=100, generations=100)
     best_fitness, roads = simulate_fixed(best_candidate)
     export_best_candidate_timings(best_candidate, roads)
 

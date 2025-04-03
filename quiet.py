@@ -82,43 +82,56 @@ class FJunction:
                 self.conflict_groups.append([])
             self.conflict_groups[conflict_group].append(light)
     
+ 
     def actuate_lights(self):
         """
-        Every 5 seconds, re-assess pressures in conflict groups (or individually) 
-        and set the light(s) with the highest queue pressure to green, the others to red.
+        Dynamically adjust lights based on pressures, limiting total cycle time
+        and redistributing green/red times across conflicting groups.
         """
+        baseline_cycle_time = 60  # Base total cycle time (seconds)
+        max_cycle_time = 120      # Cap on maximum cycle time (seconds)
+        scaling_factor = 2        # Factor to scale based on queue pressure
+        
         while True:
-            if self.start:
-                # For starting junction, skip actuation.
-                yield self.env.timeout(5)
-                continue
             if self.conflict_groups:
                 # Compute pressure for each conflict group.
                 pressures = [
                     sum(light.road.get_queue_length() for light in group)
                     for group in self.conflict_groups
                 ]
-                best_group_index = pressures.index(max(pressures))
-                for idx, group in enumerate(self.conflict_groups):
-                    if idx == best_group_index:
-                        # Adjust green time based on the pressure (for each light in the winning group).
-                        for light in group:
-                            light.green_time = min(15 + sum(light.road.get_queue_length() for light in group) * 2, 30)
-                            light.colour = "GREEN"
-                    else:
-                        for light in group:
-                            light.colour = "RED"
-            else:
-                if self.traffic_lights:
-                    best = max(self.traffic_lights, key=lambda l: l.road.get_queue_length())
-                    for light in self.traffic_lights:
-                        if light == best:
-                            light.green_time = min(15 + best.road.get_queue_length() * 2, 30)
-                            light.colour = "GREEN"
-                        else:
-                            light.colour = "RED"
-            yield self.env.timeout(5)
+                
+                # Calculate dynamic cycle time based on average pressure.
+                avg_pressure = sum(pressures) / len(self.conflict_groups)
+                total_cycle_limit = min(max_cycle_time, baseline_cycle_time + scaling_factor * avg_pressure)
 
+                # Redistribute timings across groups.
+                total_green_time = sum(sum(light.green_time for light in group) for group in self.conflict_groups)
+                total_fixed_time = sum(
+                    sum(light.red_time + light.amber_time + light.red_amber_time for light in group)
+                    for group in self.conflict_groups
+                )
+                
+                # Check if green times exceed the cycle limit.
+                if total_green_time + total_fixed_time > total_cycle_limit:
+                    # Scale down green times proportionally.
+                    scale_factor = (total_cycle_limit - total_fixed_time) / total_green_time
+                    for group in self.conflict_groups:
+                        for light in group:
+                            light.green_time *= scale_factor
+                            light.green_time = max(10, light.green_time)  # Ensure minimum green time.
+                    
+                # Adjust opposing red times proportionally.
+                for idx, group in enumerate(self.conflict_groups):
+                    for light in group:
+                        if idx == pressures.index(max(pressures)):
+                            # Winning group: green time increased dynamically.
+                            continue
+                        else:
+                            # Opposing groups: increase red time proportionally.
+                            light.red_time += scale_factor * 2  # Example proportional increase.
+                            light.red_time = max(10, min(40, light.red_time))  # Ensure bounds.
+
+            yield self.env.timeout(5)  # Reevaluate every 5 seconds.
 
 # -----------------------------
 # Road Class for Both Systems
