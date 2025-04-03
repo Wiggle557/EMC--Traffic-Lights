@@ -55,7 +55,7 @@ def quiet_main():
     # Grid dimensions.
     ROWS = 3
     COLS = 3
-    until = 600
+    until = 400
 
     # Specify one or more POI positions (row, col) in grid coordinates.
     # For example, if you want the center to be a POI:
@@ -159,7 +159,7 @@ def quiet_main():
         junctions.append(road.junction_end)
     
     # Initialize the car setup.
-    env.process(Fsetup(env, 100, roads, base_mean=9))
+    env.process(Fsetup(env, 200, roads, base_mean=9))
 
     # Run the simulation.
     env.run(until=until)
@@ -178,7 +178,7 @@ def quiet_main():
 
 
 if __name__ == "__main__":
-    total_runs = 500
+    total_runs = 200
     total_passes = 0
     timings = {}
     for _ in range(total_runs):

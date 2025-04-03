@@ -1,14 +1,15 @@
 # fixed_model.py
 import simpy
 import csv
-from quiet import FRoad, FCar  # Reuse the other classes as needed.
-from qsetup import Fsetup, Fcreate_grid_roads
-from fixed import FTrafficLightFixed, FJunctionFixed  # Our new fixed-timing classes
+from qsetup import Fsetup, Fcreate_grid_roads, sample_arrival_interval, sample_reaction_time
+from fixed import FTrafficLightFixed, FJunctionFixed  # the fixed-timing controller classes
+from quiet import FRoad, FCar  # shared classes
 
 def import_timings_csv(filename="final_timings.csv"):
     """
     Imports timing settings from a CSV file.
-    The CSV file is expected to have columns: road, red_time, green_time, amber_time, red_amber_time.
+    The CSV file is expected to have columns:
+      road, red_time, green_time, amber_time, red_amber_time.
     Returns a dictionary mapping road names to a tuple of timings.
     """
     timings = {}
@@ -51,58 +52,65 @@ def display_statistics(roads):
     
     print("Final Traffic Signal Timings and States:")
     for road in roads:
-        lt = road.traffic_light
-        print(f"{road.name}: RED={lt.red_time} s, GREEN={lt.green_time} s, AMBER={lt.amber_time} s, "
-              f"RED-AMBER={lt.red_amber_time} s, Final Phase={lt.colour}")
+        light = road.traffic_light
+        print(f"{road.name}: RED={light.red_time} s, GREEN={light.green_time} s, AMBER={light.amber_time} s, "
+              f"RED-AMBER={light.red_amber_time} s, Final Phase={light.colour}")
 
-def fixed_main():
-    # Set up simulation environment.
+
+
+def fixed_main(filename="final_timings.csv"):
+    # Create SimPy environment.
     env = simpy.Environment()
-
-    # Grid size for junctions.
+    
+    # Grid configuration.
     ROWS = 3
     COLS = 3
-    until = 600
-    num_junctions = ROWS * COLS
-    junction_names = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    # Use the fixed junction variant.
-    junctions: list[FJunctionFixed] = []
+    until = 600  # simulation duration in seconds
 
-    # For simplicity, assign a default weight (or you could compute using your POI functions).
-    weights = [[1 for j in range(COLS)] for i in range(ROWS)]
-    for i in range(num_junctions):
-        junctions.append(FJunctionFixed(env, f"{junction_names[i]}", weight=weights[i // COLS][i % COLS]))
-    
-    # Generate the grid structure.
-    junc_grid = []
+    # Create grid junctions using row/column nomenclature.
+    grid_junctions = []
     for i in range(ROWS):
         row = []
         for j in range(COLS):
-            row.append(i * COLS + j)
-        junc_grid.append(row)
+            # Use the same naming convention as main.py: "Junction_i_j"
+            row.append(FJunctionFixed(env, f"Junction_{i}_{j}", start=False, end=False, weight=1))
+        grid_junctions.append(row)
+        
+    # Flatten the grid junction list.
+    junctions = [j for row in grid_junctions for j in row]
     
-    # Generate internal road connections.
+    # Build a grid of indices for creating road connections.
+    junc_grid = []
+    for i in range(ROWS):
+        row_indices = []
+        for j in range(COLS):
+            row_indices.append(i * COLS + j)
+        junc_grid.append(row_indices)
+    
+    # Create internal road connections using the helper function.
     road_connections = Fcreate_grid_roads(junc_grid)
-
-    # Import fixed timings from CSV.
-    fixed_timings = import_timings_csv("final_timings.csv")
-
+    
+    # Import fixed timing settings from CSV.
+    fixed_timings = import_timings_csv(filename)
+    
     roads = []
+    # Create roads between grid junctions.
     for connection in road_connections:
         start_idx, end_idx, initial_color = connection
+        road_name = f"Road_{junctions[start_idx].name}_{junctions[end_idx].name}"
         new_road = FRoad(
-            f"Road_{junctions[start_idx].name}_{junctions[end_idx].name}",
+            road_name,
             speed=13,
             distance=100,
             junction_start=junctions[start_idx],
             junction_end=junctions[end_idx],
             car_queue=simpy.Store(env)
         )
-        # Look up fixed timings using the road's name.
-        if new_road.name in fixed_timings:
-            rt, gt, at, rat = fixed_timings[new_road.name]
+        # Look up timings from CSV; fall back to defaults if not found.
+        if road_name in fixed_timings:
+            rt, gt, at, rat = fixed_timings[road_name]
         else:
-            rt, gt, at, rat = 15, 15, 3, 3  # defaults if not found
+            rt, gt, at, rat = 15, 15, 3, 3
         new_road.traffic_light = FTrafficLightFixed(
             env,
             new_road,
@@ -112,26 +120,27 @@ def fixed_main():
             amber_time=at,
             colour=initial_color
         )
+        # Attach the traffic light to the end junction.
         junctions[end_idx].add_light(new_road.traffic_light)
         roads.append(new_road)
-    
-    # -------------------------
-    # Create Entrances (Inroads) on the Top Row.
-    # -------------------------
+        
+    # Create inroads (entrances) along the top row.
     inroads = []
     for j in range(COLS):
-        exit_index = j  # Top row junction index.
-        entrance = FJunctionFixed(env, f"In_{junctions[exit_index].name}", start=True)
+        # Use the junction from the first row.
+        target_junc = grid_junctions[0][j]
+        entrance = FJunctionFixed(env, f"In_{target_junc.name}", start=True)
+        road_name = f"Road_{entrance.name}_{target_junc.name}"
         road_in = FRoad(
-            f"Road_{entrance.name}_{junctions[exit_index].name}",
+            road_name,
             speed=13,
             distance=100,
             junction_start=entrance,
-            junction_end=junctions[exit_index],
+            junction_end=target_junc,
             car_queue=simpy.Store(env)
         )
-        if road_in.name in fixed_timings:
-            rt, gt, at, rat = fixed_timings[road_in.name]
+        if road_name in fixed_timings:
+            rt, gt, at, rat = fixed_timings[road_name]
         else:
             rt, gt, at, rat = 15, 15, 3, 3
         road_in.traffic_light = FTrafficLightFixed(
@@ -143,26 +152,25 @@ def fixed_main():
             amber_time=at,
             colour="RED"
         )
-        junctions[exit_index].add_light(road_in.traffic_light)
+        target_junc.add_light(road_in.traffic_light)
         inroads.append(road_in)
-
-    # -------------------------
-    # Create Exits (Outroads) on the Bottom Row.
-    # -------------------------
+    
+    # Create outroads (exits) along the bottom row.
     outroads = []
     for j in range(COLS):
-        exit_index = (ROWS - 1) * COLS + j  # Bottom row junction.
-        exit_junc = FJunctionFixed(env, f"Out_{junctions[exit_index].name}", end=True)
+        target_junc = grid_junctions[ROWS-1][j]
+        exit_junc = FJunctionFixed(env, f"Out_{target_junc.name}", end=True)
+        road_name = f"Road_{target_junc.name}_{exit_junc.name}"
         road_out = FRoad(
-            f"Road_{junctions[exit_index].name}_{exit_junc.name}",
+            road_name,
             speed=13,
             distance=100,
-            junction_start=junctions[exit_index],
+            junction_start=target_junc,
             junction_end=exit_junc,
             car_queue=simpy.Store(env)
         )
-        if road_out.name in fixed_timings:
-            rt, gt, at, rat = fixed_timings[road_out.name]
+        if road_name in fixed_timings:
+            rt, gt, at, rat = fixed_timings[road_name]
         else:
             rt, gt, at, rat = 15, 15, 3, 3
         road_out.traffic_light = FTrafficLightFixed(
@@ -176,22 +184,42 @@ def fixed_main():
         )
         exit_junc.add_light(road_out.traffic_light)
         outroads.append(road_out)
-
+    
+    # Add inroads and outroads to the overall list of roads.
     roads.extend(inroads)
     roads.extend(outroads)
     
-    # Also add the entrance and exit junctions to the overall list.
-    for road in inroads:
-        junctions.append(road.junction_start)
-    for road in outroads:
-        junctions.append(road.junction_end)
+    # Optionally, add the entrance and exit junctions to the junction list.
+    for rd in inroads:
+        junctions.append(rd.junction_start)
+    for rd in outroads:
+        junctions.append(rd.junction_end)
     
-    # Use the same car setup as before.
+    # Launch the car-generation process (using the shared setup from qsetup.py).
     env.process(Fsetup(env, 100, roads, base_mean=9))
+    
+    # Run the simulation.
     env.run(until=until)
     
-    # Display statistics at the end of simulation.
+    # Collect and display statistics.
+    timings = {}
+    total_passes = 0
+    # For each road, record its final traffic light timings and aggregate junction passes.
+    for road in roads:
+        timings[road.name] = [
+            road.traffic_light.red_time,
+            road.traffic_light.green_time,
+            road.traffic_light.amber_time,
+            road.traffic_light.red_amber_time
+        ]
+        for car in road.car_queue.items:
+            total_passes += car.junction_passes
     display_statistics(roads)
+    print("Average Timings:", timings)
+    # Assuming 100 cars were generated.
+    print("Average Junction Passes:", total_passes / 100)
+
 
 if __name__ == "__main__":
     fixed_main()
+    fixed_main("best_candidate_timings.csv")
