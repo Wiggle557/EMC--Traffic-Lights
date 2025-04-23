@@ -55,7 +55,6 @@ class FTrafficLight:
                 self.colour = "RED"
                 yield self.env.timeout(self.red_time)
 
-
 # -----------------------------
 # Junction for Actuated System
 # -----------------------------
@@ -77,60 +76,45 @@ class FJunction:
     def add_light(self, light: FTrafficLight, conflict_group: int | None = None):
         self.traffic_lights.append(light)
         if conflict_group is not None:
-            # Ensure there is room for this group index.
+            # Ensure the conflict groups list is large enough.
             while len(self.conflict_groups) <= conflict_group:
                 self.conflict_groups.append([])
             self.conflict_groups[conflict_group].append(light)
     
- 
     def actuate_lights(self):
         """
         Dynamically adjust lights based on pressures, limiting total cycle time
         and redistributing green/red times across conflicting groups.
         """
         baseline_cycle_time = 60  # Base total cycle time (seconds)
-        max_cycle_time = 120      # Cap on maximum cycle time (seconds)
-        scaling_factor = 2        # Factor to scale based on queue pressure
+        max_cycle_time = 120      # Max cycle cap (seconds)
+        scaling_factor = 2        # Pressure scaling factor
         
         while True:
             if self.conflict_groups:
-                # Compute pressure for each conflict group.
                 pressures = [
                     sum(light.road.get_queue_length() for light in group)
                     for group in self.conflict_groups
                 ]
-                
-                # Calculate dynamic cycle time based on average pressure.
                 avg_pressure = sum(pressures) / len(self.conflict_groups)
                 total_cycle_limit = min(max_cycle_time, baseline_cycle_time + scaling_factor * avg_pressure)
-
-                # Redistribute timings across groups.
-                total_green_time = sum(sum(light.green_time for light in group) for group in self.conflict_groups)
-                total_fixed_time = sum(
-                    sum(light.red_time + light.amber_time + light.red_amber_time for light in group)
-                    for group in self.conflict_groups
-                )
                 
-                # Check if green times exceed the cycle limit.
+                total_green_time = sum(sum(light.green_time for light in group) for group in self.conflict_groups)
+                total_fixed_time = sum(sum(light.red_time + light.amber_time + light.red_amber_time for light in group)
+                                        for group in self.conflict_groups)
                 if total_green_time + total_fixed_time > total_cycle_limit:
-                    # Scale down green times proportionally.
                     scale_factor = (total_cycle_limit - total_fixed_time) / total_green_time
                     for group in self.conflict_groups:
                         for light in group:
                             light.green_time *= scale_factor
-                            light.green_time = max(10, light.green_time)  # Ensure minimum green time.
-                    
-                # Adjust opposing red times proportionally.
+                            light.green_time = max(10, light.green_time)
                 for idx, group in enumerate(self.conflict_groups):
                     for light in group:
                         if idx == pressures.index(max(pressures)):
-                            # Winning group: green time increased dynamically.
                             continue
                         else:
-                            # Opposing groups: increase red time proportionally.
-                            light.red_time += scale_factor * 2  # Example proportional increase.
-                            light.red_time = max(10, min(40, light.red_time))  # Ensure bounds.
-
+                            light.red_time += scale_factor * 2
+                            light.red_time = max(10, min(40, light.red_time))
             yield self.env.timeout(5)  # Reevaluate every 5 seconds.
 
 # -----------------------------
@@ -151,9 +135,8 @@ class FRoad:
     def get_queue_length(self) -> int:
         return len(self.car_queue.items)
 
-
 # -----------------------------
-# Car Class for Actuated Model
+# Car Class (Restored Kinematics merged with Actuated Version)
 # -----------------------------
 class FCar:
     def __init__(self, env: simpy.Environment, name: str, road: FRoad,
@@ -162,65 +145,128 @@ class FCar:
                  length: float = 4.9):
         self.env = env
         self.name = name
-        self.road = road           # Current road.
-        self.roads = roads         # Available roads for route selection.
+        self.road = road
+        self.roads = roads
         self.reaction_time = reaction_time
         self.acceleration = acceleration
         self.decceleration = decceleration
         self.length = length
-        self.junction_passes = 0   # Count of junctions passed.
-        self.wait_time = 0         # Total accumulated waiting time.
-        self.speed = road.speed    # Current speed (initialized to the road's speed).
-    
+        self.junction_passes = 0
+        self.wait_time = 0
+        self.speed = road.speed  # initial speed
+        
     def run(self):
         """
-        Process of a car:
-         - Enter a road's queue.
-         - Wait (accumulating wait time) until the light is green and it's at the head of the queue.
-         - Include an additional start delay once conditions are met.
-         - Traverse the road (for now, using a placeholder travel time).
-         - Update statistics and choose the next road.
+        Process for a car using the restored kinematics:
+          - The car enters a road queue and waits until the light is green, 
+            it is first in queue, and there is sufficient space.
+          - Once allowed, it calculates:
+            - v_max based on the distance available;
+            - total_tG (green travel time) and new_speed.
+            - Then calculates an intermediate speed v_p for deceleration, 
+              and total_tR (red-phase travel time).
+          - It simulates the traffic light cycle to decide whether it will proceed 
+            under green or be forced to stop.
+          - The car then waits the computed travel time, splits into two halves.
+          - Finally, it updates its current road by choosing a possible next road.
         """
         distance = self.road.distance
         while True:
-            # Enter the road queue.
             yield self.road.car_queue.put(self)
-            
-            # Request permission to pass the junction.
             with self.road.junction_start.queue.request(priority=1) as request:
                 yield request
-                
-                # Wait until the light is favorable and the car is first in the queue.
-                while (self.road.traffic_light.colour in ["RED", "RAMBER", "AMBER"]
-                       or self.road.car_queue.items[0] != self):
+                # Wait until the light is not red/ambers and self is first in queue.
+                while (self.road.traffic_light.colour in ["RED", "RAMBER", "AMBER"] or 
+                       self.road.car_queue.items[0] != self):
                     delay = sample_reaction_time(mean=self.reaction_time, std=0.2)
                     self.wait_time += delay
                     yield self.env.timeout(delay)
                 
-                # Extra start delay upon green signal.
+                # Extra start delay.
                 start_delay = sample_reaction_time(mean=0.8, std=0.1, lower=0.5, upper=1.0)
                 self.wait_time += start_delay
                 yield self.env.timeout(start_delay)
             
-            # Placeholder travel time; here you would calculate acceleration/deceleration etc.
-            travel_time = 5  # Replace with a kinematics-based computation if desired.
-            yield self.env.timeout(travel_time)
+            # Kinematics computation:
+            # Adjust distance based on the occupancy of the road.
+            for car in self.road.car_queue.items:
+                distance -= car.length
             
-            # Update statistics.
-            self.junction_passes += 1
-            # Choose the next road. In this simplified example, pick a random available road.
-            possible_roads = [road for road in self.roads if road.junction_start == self.road.junction_end]
-            if not possible_roads:
-                break  # End if no further roads are available.
-            self.road = random.choice(possible_roads)
-            distance = self.road.distance
+            v_max = math.sqrt(self.speed**2 + 2 * self.acceleration * distance)
+            if v_max <= self.road.speed:
+                total_tG = (v_max - self.speed) / self.acceleration
+                new_speed = v_max
+            else:
+                s_1 = (self.road.speed**2 - self.speed**2) / (2 * self.acceleration)
+                s_c = distance - s_1
+                t_1 = (self.road.speed - self.speed) / self.acceleration
+                t_c = s_c / self.road.speed
+                total_tG = t_1 + t_c
+                new_speed = self.road.speed
             
+            final_v = 0
+            v_p = math.sqrt((self.decceleration * self.speed**2 - self.acceleration * final_v**2 + 2 * self.acceleration * self.decceleration) / (self.decceleration - self.acceleration))
+            if v_p > self.road.speed:
+                s_1 = (self.road.speed**2 - self.speed**2) / (2 * self.acceleration)
+                s_2 = (final_v - self.road.speed**2) / (2 * self.decceleration)
+                s_c = distance - s_1 - s_2
+                t_1 = (self.road.speed - self.speed) / self.acceleration
+                t_c = s_c / self.road.speed
+                t_2 = (self.road.speed - final_v) / abs(self.decceleration)
+                total_tR = t_1 + t_c + t_2
+            else:
+                t_1 = (v_p - self.speed) / self.acceleration
+                t_2 = (final_v - v_p) / self.decceleration
+                total_tR = t_1 + t_2
+            
+            colour = self.road.traffic_light.colour
+            t = self.env.now - self.road.traffic_light.last_change
+            while t < total_tR:
+                match colour:
+                    case "RED":
+                        colour = "RAMBER"
+                        t += self.road.traffic_light.red_amber_time
+                    case "RAMBER":
+                        colour = "GREEN"
+                        t += self.road.traffic_light.green_time
+                    case "GREEN":
+                        colour = "AMBER"
+                        t += self.road.traffic_light.amber_time
+                    case "AMBER":
+                        colour = "RED"
+                        t += self.road.traffic_light.red_time
+            
+            if colour in ["RED", "RAMBER"]:
+                travel_time = total_tR
+                self.speed = 0
+            else:
+                travel_time = total_tG
+                self.speed = new_speed
+            
+            yield self.env.timeout(travel_time / 2)
+            yield self.env.timeout(travel_time / 2)
+            
+            distance = 0
+            for car in self.road.car_queue.items:
+                distance += car.length
+            # Choose next road.
+            next_junction = self.road.junction_end
+            possible_roads = [
+                road for road in self.roads 
+                if road.junction_start == next_junction and 
+                   (sum(car.length for car in road.car_queue.items) + self.length < road.distance) and
+                   (not road.junction_end.start)
+            ]
+            weights = [road.junction_end.weight for road in possible_roads]
+            total_weight = sum(weights)
+            probabilities = [weight/total_weight for weight in weights]
+            self.road = random.choices(possible_roads, probabilities)[0]
+            distance += self.road.distance
 
 # -----------------------------
-# Helper Function for Reaction Time (if not using uniform)
+# Helper for Reaction Time Sampling.
 # -----------------------------
 def sample_reaction_time(mean=1.0, std=0.2, lower=0.5, upper=1.5) -> float:
-    # For demonstration, this uses a simple uniform distribution.
-    # Alternatively, a truncated normal distribution can be used.
+    # For demonstration, using a uniform distribution between lower and upper.
     return random.uniform(lower, upper)
 
