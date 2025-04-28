@@ -239,14 +239,12 @@ class FCar:
             else:
                 travel_time = total_tG
                 self.speed = new_speed
-            print(f"[{self.env.now}] {self.name} traveling with travel_time={travel_time:.2f}, new_speed={self.speed:.2f}.")
             # Simulate travel time (split into two halves).
             yield self.env.timeout(travel_time)
             
             # Remove self from current road's queue after traveling.
             if self in self.road.car_queue.items:
                 self.road.car_queue.items.remove(self)
-                print(f"[{self.env.now}] {self.name} removed from road {self.road.name} queue.")
             self.junction_passes += 1
             
             # Choose the next road from candidate roads at the destination junction.
@@ -272,11 +270,7 @@ class FCar:
                 probabilities = [w / total_weight for w in weights]
             if probabilities and possible_roads:
                 chosen_road = random.choices(possible_roads, probabilities)[0]
-                print(f"[{self.env.now}] {self.name} selecting next road {chosen_road.name}.")
                 self.road = chosen_road
-            else:
-                # If no candidate road is found, remain on current road.
-                print(f"[{self.env.now}] {self.name} found no candidate road; continuing on the same road.")
         # End of loop—if car exits or breaks from while, process terminates.
 
 # -----------------------------

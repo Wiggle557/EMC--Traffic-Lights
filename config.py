@@ -20,8 +20,8 @@ VERTICAL_ROAD_LENGTH = 120    # Length in meters for vertical roads.
 # Timing Defaults for Fixed Model
 # -----------------------------
 FIXED_TIMINGS_CSV = "final_timings.csv"
-DEFAULT_RED_TIME = 15
-DEFAULT_GREEN_TIME = 15
+DEFAULT_RED_TIME = 40
+DEFAULT_GREEN_TIME = 40
 DEFAULT_AMBER_TIME = 3
 DEFAULT_RED_AMBER_TIME = 3
 

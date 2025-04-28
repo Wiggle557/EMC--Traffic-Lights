@@ -1,13 +1,14 @@
 # fixed_model.py
 import simpy, csv, random, threading, time
 from quiet import FRoad, FCar, sample_reaction_time, completed_cars
-from fixed import FTrafficLightFixed, FJunctionFixed  # Fixed-traffic light and junction classes
+from fixed import FTrafficLightFixed, FJunctionFixed  # Fixed-traffic light and junction classes.
 from display import animate_network, display_statistics
 from config import (GRID_ROWS, GRID_COLS, SIM_DURATION, DISPLAY_INTERVAL,
                     BASE_MEAN, RANDOM_SEED, FIXED_TIMINGS_CSV, DEFAULT_RED_TIME,
                     DEFAULT_GREEN_TIME, DEFAULT_AMBER_TIME, DEFAULT_RED_AMBER_TIME,
                     HORIZONTAL_ROAD_LENGTH, VERTICAL_ROAD_LENGTH)
 
+# Create grid roads using horizontal and vertical road lengths.
 def create_grid_roads(grid_junctions):
     connections = []
     rows = len(grid_junctions)
@@ -32,19 +33,22 @@ def create_grid_roads(grid_junctions):
             connections.append((dst, src, "RED", VERTICAL_ROAD_LENGTH))
     return connections
 
+# Create a junction.
 def create_junction(env, i, j, total_rows, total_cols):
-    # For simplicity, using the fixed junction class for every junction.
-    return FJunctionFixed(env, f"Junction_{i}_{j}", start=True, end=True, weight=1)
+    # Only the four corners are treated as true exits.
+    if (i == 0 and j == 0) or (i == 0 and j == total_cols-1) or (i == total_rows-1 and j == 0) or (i == total_rows-1 and j == total_cols-1):
+        return FJunctionFixed(env, f"Junction_{i}_{j}", start=True, end=True, weight=1)
+    else:
+        return FJunctionFixed(env, f"Junction_{i}_{j}", start=True, end=False, weight=1)
 
+# Compute statistics (average waiting time) including cars still queued and those completed.
 def get_statistics(roads):
     total_wait = 0
     count = 0
-    # Car stats from vehicles that are still in queues.
     for road in roads:
         for car in road.car_queue.items:
             total_wait += getattr(car, "wait_time", 0)
             count += 1
-    # Plus statistics from cars that have finished (logged in completed_cars).
     for data in completed_cars:
         total_wait += data.get("wait_time", 0)
         count += 1
@@ -65,7 +69,7 @@ def fixed_main(filename=FIXED_TIMINGS_CSV, candidate_timings=None, sim_duration=
             row_list.append(create_junction(env, i, j, rows, cols))
         grid_junctions.append(row_list)
     
-    # Create grid roads.
+    # Create road connections from the grid.
     connections = create_grid_roads(grid_junctions)
     
     # Load candidate timings from CSV if candidate_timings is not provided.
@@ -110,14 +114,23 @@ def fixed_main(filename=FIXED_TIMINGS_CSV, candidate_timings=None, sim_duration=
             pass
         roads.append(new_road)
     
-    # Generate cars.
+    # Car generation.
     cars_data = []
     def delayed_car_release(env, release_time, car):
         yield env.timeout(release_time)
         yield env.process(car.run())
+    
+    # Select a starting road — we filter out roads whose destination junction is an exit.
+    startable = [
+        road for road in roads 
+        if hasattr(road.junction_start, "start") and road.junction_start.start and not getattr(road.junction_end, "end", False)
+    ]
+    print(f"Found {len(startable)} startable roads with strict filter.")
+    if not startable:
+        print("No startable roads found using strict filter; falling back to all roads.")
+        startable = roads
+    
     for i in range(100):
-        # Choose a starting road from junctions that allow entry.
-        startable = [road for road in roads if hasattr(road.junction_start, "start") and road.junction_start.start]
         chosen = random.choice(startable)
         reaction_time = sample_reaction_time(mean=1.0, std=0.2)
         release_time = random.expovariate(1/BASE_MEAN)
@@ -145,4 +158,5 @@ def fixed_main(filename=FIXED_TIMINGS_CSV, candidate_timings=None, sim_duration=
 
 if __name__ == "__main__":
     fixed_main()
+
 
