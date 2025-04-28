@@ -13,7 +13,12 @@ def Fsetup(env: simpy.Environment, num_cars: int, roads: list[FRoad], base_mean:
     """
     for i in range(num_cars):
         # Select roads where the junction_start is marked as an entry point.
-        startable_roads = [road for road in roads if road.junction_start.start]
+        startable = [
+            road for road in roads
+            if hasattr(road.junction_start, "start") and road.junction_start.start
+            and not road.junction_end.end  # Exclude roads that lead directly to an exit.
+        ]
+
         if not startable_roads:
             break
         # Choose based on inverted queue length for load balancing.

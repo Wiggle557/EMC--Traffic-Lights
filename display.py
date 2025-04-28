@@ -10,12 +10,11 @@ import matplotlib.patches as mpatches
 
 def build_graph(roads):
     """
-    Constructs a NetworkX MultiDiGraph from the list of road objects.
-    Each road's junction_start and junction_end must have a 'name' attribute.
-    Each edge stores:
-      - traffic_state: the current color of the traffic light,
-      - queue: the number of cars waiting,
-      - key: the road's unique name.
+    Constructs a NetworkX MultiDiGraph from the road objects.
+    Each edge carries:
+      - 'traffic_state' (traffic light colour),
+      - 'queue' (current number of cars on that road),
+      - 'key' (a unique identifier, typically the road's name).
     """
     G = nx.MultiDiGraph()
     for road in roads:
@@ -29,9 +28,8 @@ def build_graph(roads):
 
 def get_node_positions(grid_rows, grid_cols):
     """
-    Returns a dictionary mapping node names to positions.
-    Base nodes are at (j, -i). Side nodes (Top, Bottom, Left, Right)
-    are given a small offset; external nodes are more offset.
+    Returns a dictionary of node positions. Base nodes are at (j, -i) with
+    offsets for external and connector nodes.
     """
     positions = {}
     for i in range(grid_rows):
@@ -53,15 +51,9 @@ def get_node_positions(grid_rows, grid_cols):
     return positions
 
 def update(frame, env_time, roads, pos, ax):
-    """
-    Update function for FuncAnimation.
-    Draws nodes, edges, and their labels using unique keys for each directed edge.
-    Also adds a legend and a dynamic title with the current simulation time.
-    """
     ax.clear()
     G = build_graph(roads)
     
-    # Draw nodes and labels.
     nx.draw_networkx_nodes(G, pos, node_size=400, node_color="lightblue", ax=ax)
     nx.draw_networkx_labels(G, pos, ax=ax, font_size=8)
     
@@ -69,7 +61,6 @@ def update(frame, env_time, roads, pos, ax):
     edge_labels = {}
     custom_label_positions = {}
     for u, v, key, data in G.edges(keys=True, data=True):
-        # Use the triple (u, v, key) for uniqueness.
         count = seen.get((u, v, key), 0)
         rad = 0.1 * ((count // 2) + 1) * (1 if count % 2 == 0 else -1)
         seen[(u, v, key)] = count + 1
@@ -87,12 +78,12 @@ def update(frame, env_time, roads, pos, ax):
         
         x1, y1 = pos[u]
         x2, y2 = pos[v]
-        mx, my = (x1 + x2) / 2, (y1 + y2) / 2
-        dx, dy = x2 - x1, y2 - y1
-        length = sqrt(dx**2 + dy**2)
-        perp = (0, 0) if length == 0 else (-dy / length, dx / length)
-        offset = rad * 1.5
-        lx, ly = mx + perp[0] * offset, my + perp[1] * offset
+        mx, my = (x1+x2)/2, (y1+y2)/2
+        dx, dy = x2-x1, y2-y1
+        length = sqrt(dx**2+dy**2)
+        perp = (0,0) if length==0 else (-dy/length, dx/length)
+        fixed_offset = 0.2  # Fixed offset for consistent label positioning.
+        lx, ly = mx + perp[0]*fixed_offset, my + perp[1]*fixed_offset
         custom_label_positions[(u, v, key)] = (lx, ly)
         
         if queue_val:
@@ -100,9 +91,9 @@ def update(frame, env_time, roads, pos, ax):
     
     for (u, v, key), label in edge_labels.items():
         lx, ly = custom_label_positions[(u, v, key)]
-        ax.text(lx, ly, label, fontsize=7, color='blue', horizontalalignment='center', verticalalignment='center')
+        ax.text(lx, ly, label, fontsize=7, color='blue',
+                horizontalalignment='center', verticalalignment='center')
     
-    # Add a legend.
     red_patch = mpatches.Patch(color='red', label='RED Light')
     green_patch = mpatches.Patch(color='green', label='GREEN Light')
     blue_patch = mpatches.Patch(color='blue', label='Queue Count')
@@ -112,31 +103,21 @@ def update(frame, env_time, roads, pos, ax):
     ax.set_axis_off()
 
 def animate_network(env, roads, grid_rows, grid_cols, update_interval=1, save_to_file=None):
-    """
-    Sets up and runs the animation using FuncAnimation.
-    If save_to_file is provided (such as "simulation.mp4"), the animation is saved using FFmpeg or ImageMagick.
-    """
     pos = get_node_positions(grid_rows, grid_cols)
-    fig, ax = plt.subplots(figsize=(8, 8))
+    fig, ax = plt.subplots(figsize=(8,8))
     env_time = partial(lambda: int(env.now))
     ani = FuncAnimation(fig, update, fargs=(env_time, roads, pos, ax),
-                        interval=update_interval * 1000,
+                        interval=update_interval*1000,
                         cache_frame_data=False, save_count=200)
     if save_to_file:
         writer = 'ffmpeg' if save_to_file.endswith('.mp4') else 'imagemagick'
-        ani.save(save_to_file, fps=int(1/update_interval), writer=writer)
+        ani.save(save_to_file, fps=5, writer=writer)
         print(f"Animation saved to {save_to_file}")
     else:
         plt.show()
     return ani
 
 def display_statistics(roads):
-    """
-    Computes simulation statistics from the road object list and prints them.
-      - Total junction passes
-      - Average junction passes per car
-      - Average waiting time per car
-    """
     total_passes = 0
     total_wait = 0
     count = 0
@@ -149,6 +130,6 @@ def display_statistics(roads):
     print("Simulation Statistics:")
     print("----------------------")
     print("Total Junction Passes:", total_passes)
-    print("Average Junction Passes per Car:", total_passes / count if count else 0)
+    print("Average Junction Passes per Car:", total_passes/count if count else 0)
     print("Average Waiting Time per Car:", avg_wait)
 

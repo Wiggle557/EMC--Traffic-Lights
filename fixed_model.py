@@ -1,171 +1,105 @@
 # fixed_model.py
 import simpy, csv, random, threading, time
-from qsetup import sample_reaction_time
-from fixed import FTrafficLightFixed, FJunctionFixed
-from quiet import FRoad, FCar
+from quiet import FRoad, FCar, sample_reaction_time, completed_cars
+from fixed import FTrafficLightFixed, FJunctionFixed  # Fixed-traffic light and junction classes
 from display import animate_network, display_statistics
-from config import (
-    GRID_ROWS, GRID_COLS, SIM_DURATION, DISPLAY_INTERVAL, BASE_MEAN, RANDOM_SEED,
-    FIXED_TIMINGS_CSV, DEFAULT_RED_TIME, DEFAULT_GREEN_TIME, DEFAULT_AMBER_TIME, DEFAULT_RED_AMBER_TIME
-)
+from config import (GRID_ROWS, GRID_COLS, SIM_DURATION, DISPLAY_INTERVAL,
+                    BASE_MEAN, RANDOM_SEED, FIXED_TIMINGS_CSV, DEFAULT_RED_TIME,
+                    DEFAULT_GREEN_TIME, DEFAULT_AMBER_TIME, DEFAULT_RED_AMBER_TIME,
+                    HORIZONTAL_ROAD_LENGTH, VERTICAL_ROAD_LENGTH)
 
-### Composite Junction with Connectors for boundaries ###
-class CompositeJunctionFixed:
-    def __init__(self, env, base_name, i, j, total_rows, total_cols):
-        self.env = env
-        self.base_name = base_name
-        # Base node used for grid internal connections.
-        self.base = FJunctionFixed(env, base_name, start=True, end=True, weight=1)
-        self.sides = {}
-        if i == 0:
-            self.sides["top"] = FJunctionFixed(env, f"Top_{base_name}", start=True, end=True, weight=1)
-        if i == total_rows - 1:
-            self.sides["bottom"] = FJunctionFixed(env, f"Bottom_{base_name}", start=True, end=True, weight=1)
-        if j == 0:
-            self.sides["left"] = FJunctionFixed(env, f"Left_{base_name}", start=True, end=True, weight=1)
-        if j == total_cols - 1:
-            self.sides["right"] = FJunctionFixed(env, f"Right_{base_name}", start=True, end=True, weight=1)
-        self.connectors = {}
-        for side, node in self.sides.items():
-            conn_name = f"Connector_{side}_{base_name}"
-            connector = FRoad(conn_name, speed=100, distance=1,
-                              junction_start=node,
-                              junction_end=self.base,
-                              car_queue=simpy.Store(env))
-            connector.traffic_light = FTrafficLightFixed(
-                env, connector,
-                red_time=1, green_time=1, red_amber_time=0.5, amber_time=0.5,
-                colour="GREEN"
-            )
-            self.connectors[side] = connector
-
-    def get_side(self, direction):
-        return self.sides.get(direction, self.base)
-
-    def add_light(self, light):
-        self.base.add_light(light)
-        for node in self.sides.values():
-            node.add_light(light)
-
-### Helper: Create a junction. Use composite junction for boundaries.
-def create_junction(env, i, j, total_rows, total_cols):
-    if i == 0 or i == total_rows - 1 or j == 0 or j == total_cols - 1:
-        return CompositeJunctionFixed(env, f"Junction_{i}_{j}", i, j, total_rows, total_cols)
-    else:
-        return FJunctionFixed(env, f"Junction_{i}_{j}", start=True, end=True, weight=1)
-
-### Create grid roads (bidirectional).
 def create_grid_roads(grid_junctions):
     connections = []
     rows = len(grid_junctions)
     cols = len(grid_junctions[0])
-    # Horizontal connections: start as GREEN.
+    # Horizontal connections.
     for i in range(rows):
-        for j in range(cols-1):
+        for j in range(cols - 1):
             left_junc = grid_junctions[i][j]
             right_junc = grid_junctions[i][j+1]
             src = left_junc.base if hasattr(left_junc, "base") else left_junc
             dst = right_junc.base if hasattr(right_junc, "base") else right_junc
-            connections.append((src, dst, "GREEN"))
-            connections.append((dst, src, "GREEN"))
-    # Vertical connections: start as RED.
-    for i in range(rows-1):
+            connections.append((src, dst, "GREEN", HORIZONTAL_ROAD_LENGTH))
+            connections.append((dst, src, "GREEN", HORIZONTAL_ROAD_LENGTH))
+    # Vertical connections.
+    for i in range(rows - 1):
         for j in range(cols):
             top_junc = grid_junctions[i][j]
             bottom_junc = grid_junctions[i+1][j]
             src = top_junc.base if hasattr(top_junc, "base") else top_junc
             dst = bottom_junc.base if hasattr(bottom_junc, "base") else bottom_junc
-            connections.append((src, dst, "RED"))
-            connections.append((dst, src, "RED"))
+            connections.append((src, dst, "RED", VERTICAL_ROAD_LENGTH))
+            connections.append((dst, src, "RED", VERTICAL_ROAD_LENGTH))
     return connections
 
-### Import timings from CSV
-def import_timings_csv(filename=FIXED_TIMINGS_CSV):
-    timings = {}
-    try:
-        with open(filename, "r") as csvfile:
-            reader = csv.DictReader(csvfile)
-            for row in reader:
-                road_name = row["road"]
-                timings[road_name] = (float(row["red_time"]),
-                                      float(row["green_time"]),
-                                      float(row["amber_time"]),
-                                      float(row["red_amber_time"]))
-    except FileNotFoundError:
-        pass
-    return timings
-
-### Generate cars.
-def generate_cars(env, num_cars, roads, base_mean, cars_data=None):
-    cars = cars_data if cars_data else []
-    for i in range(num_cars):
-        if cars_data:
-            data = cars_data[i]
-            reaction_time = data["reaction_time"]
-            release_time = data["release_time"]
-            road_name = data["road"].name
-            chosen = next(road for road in roads if road.name == road_name)
-        else:
-            startable = [road for road in roads if (road.junction_start is None) or (hasattr(road.junction_start, "start") and road.junction_start.start)]
-            weights = [1/(len(road.car_queue.items)+1) for road in startable]
-            chosen = random.choices(startable, weights=weights)[0]
-            reaction_time = sample_reaction_time(mean=1.0, std=0.2)
-            release_time = random.expovariate(1/base_mean)
-            cars.append({"reaction_time": reaction_time, "road": chosen, "release_time": release_time})
-        car = FCar(env, f"Car_{i}", chosen, roads, reaction_time=reaction_time)
-        env.process(delayed_car_release(env, release_time, car))
-    return cars
-
-def delayed_car_release(env, release_time, car):
-    yield env.timeout(release_time)
-    yield env.process(car.run())
+def create_junction(env, i, j, total_rows, total_cols):
+    # For simplicity, using the fixed junction class for every junction.
+    return FJunctionFixed(env, f"Junction_{i}_{j}", start=True, end=True, weight=1)
 
 def get_statistics(roads):
-    total_passes = 0
     total_wait = 0
     count = 0
+    # Car stats from vehicles that are still in queues.
     for road in roads:
         for car in road.car_queue.items:
-            total_passes += car.junction_passes
             total_wait += getattr(car, "wait_time", 0)
             count += 1
-    avg_wait = total_wait / count if count else 0
-    return {"total_passes": total_passes, "avg_wait": avg_wait}
+    # Plus statistics from cars that have finished (logged in completed_cars).
+    for data in completed_cars:
+        total_wait += data.get("wait_time", 0)
+        count += 1
+    avg_wait = total_wait / count if count > 0 else 0
+    return {"avg_wait": avg_wait}
 
-### Main fixed simulation function.
-def fixed_main(filename=FIXED_TIMINGS_CSV, cars_data=None, sim_duration=SIM_DURATION,
+def fixed_main(filename=FIXED_TIMINGS_CSV, candidate_timings=None, sim_duration=SIM_DURATION,
                rows=GRID_ROWS, cols=GRID_COLS, display_interval=DISPLAY_INTERVAL,
-               random_seed=RANDOM_SEED, headless=False, candidate_timings=None):
+               random_seed=RANDOM_SEED, headless=False):
     random.seed(random_seed)
     env = simpy.Environment()
+    
+    # Create grid junctions.
     grid_junctions = []
     for i in range(rows):
         row_list = []
         for j in range(cols):
             row_list.append(create_junction(env, i, j, rows, cols))
         grid_junctions.append(row_list)
+    
+    # Create grid roads.
     connections = create_grid_roads(grid_junctions)
-    if candidate_timings is not None:
-        fixed_timings = candidate_timings
-    else:
-        fixed_timings = import_timings_csv(filename)
+    
+    # Load candidate timings from CSV if candidate_timings is not provided.
+    if candidate_timings is None:
+        candidate_timings = {}
+        try:
+            with open(filename, "r") as csvfile:
+                reader = csv.DictReader(csvfile)
+                for row in reader:
+                    road_name = row["road"]
+                    candidate_timings[road_name] = (float(row["red_time"]),
+                                                    float(row["green_time"]),
+                                                    float(row["amber_time"]),
+                                                    float(row["red_amber_time"]))
+        except FileNotFoundError:
+            pass
+
     roads = []
-    for source, dest, init_color in connections:
+    for source, dest, init_color, road_length in connections:
         road_name = f"Road_{source.name}_{dest.name}"
-        new_road = FRoad(road_name, speed=13, distance=100,
+        new_road = FRoad(road_name, speed=13, distance=road_length,
                          junction_start=source,
                          junction_end=dest,
                          car_queue=simpy.Store(env))
-        if road_name in fixed_timings:
-            rt, gt, at, rat = fixed_timings[road_name]
+        if road_name in candidate_timings:
+            rt, gt, at, rat = candidate_timings[road_name]
         else:
             rt, gt, at, rat = DEFAULT_RED_TIME, DEFAULT_GREEN_TIME, DEFAULT_AMBER_TIME, DEFAULT_RED_AMBER_TIME
-        new_road.traffic_light = FTrafficLightFixed(
-            env, new_road,
-            red_time=rt, green_time=gt,
-            red_amber_time=rat, amber_time=at,
-            colour=init_color
-        )
+        new_road.traffic_light = FTrafficLightFixed(env, new_road,
+                                                    red_time=rt,
+                                                    green_time=gt,
+                                                    red_amber_time=rat,
+                                                    amber_time=at,
+                                                    colour=init_color)
         try:
             source.add_light(new_road.traffic_light)
         except Exception:
@@ -175,183 +109,22 @@ def fixed_main(filename=FIXED_TIMINGS_CSV, cars_data=None, sim_duration=SIM_DURA
         except Exception:
             pass
         roads.append(new_road)
-        
-    # Create external roads with two-way (bidirectional) connections.
-    # Top external connections.
-    inroads = []
-    for j in range(cols):
-        junction = grid_junctions[0][j]
-        grid_entry = junction.get_side("top") if hasattr(junction, "get_side") else junction
-        ext_entry = FJunctionFixed(env, f"Ext_Top_{junction.base_name if hasattr(junction, 'base_name') else junction.name}",
-                                   start=True, end=True, weight=1)
-        # Road from external -> grid.
-        road_name = f"Road_ExtTop_{grid_entry.name}"
-        entry = FRoad(road_name, speed=13, distance=100,
-                      junction_start=ext_entry, junction_end=grid_entry,
-                      car_queue=simpy.Store(env))
-        entry.traffic_light = FTrafficLightFixed(
-            env, entry,
-            red_time=DEFAULT_RED_TIME, green_time=DEFAULT_GREEN_TIME,
-            red_amber_time=DEFAULT_RED_AMBER_TIME, amber_time=DEFAULT_AMBER_TIME,
-            colour="RED"
-        )
-        ext_entry.add_light(entry.traffic_light)
-        try:
-            grid_entry.add_light(entry.traffic_light)
-        except Exception:
-            pass
-        inroads.append(entry)
-        # Reverse road (grid -> external)
-        road_name_rev = f"Road_{grid_entry.name}_ExtTop_Rev"
-        entry_rev = FRoad(road_name_rev, speed=13, distance=100,
-                          junction_start=grid_entry, junction_end=ext_entry,
-                          car_queue=simpy.Store(env))
-        entry_rev.traffic_light = FTrafficLightFixed(
-            env, entry_rev,
-            red_time=DEFAULT_RED_TIME, green_time=DEFAULT_GREEN_TIME,
-            red_amber_time=DEFAULT_RED_AMBER_TIME, amber_time=DEFAULT_AMBER_TIME,
-            colour="RED"
-        )
-        try:
-            grid_entry.add_light(entry_rev.traffic_light)
-        except Exception:
-            pass
-        ext_entry.add_light(entry_rev.traffic_light)
-        inroads.append(entry_rev)
-        
-    # Bottom external connections.
-    outroads = []
-    for j in range(cols):
-        junction = grid_junctions[rows-1][j]
-        grid_exit = junction.get_side("bottom") if hasattr(junction, "get_side") else junction
-        ext_exit = FJunctionFixed(env, f"Ext_Bottom_{junction.base_name if hasattr(junction, 'base_name') else junction.name}",
-                                  start=True, end=True, weight=1)
-        road_name = f"Road_{grid_exit.name}_ExtBottom"
-        exit_road = FRoad(road_name, speed=13, distance=100,
-                          junction_start=grid_exit, junction_end=ext_exit,
-                          car_queue=simpy.Store(env))
-        exit_road.traffic_light = FTrafficLightFixed(
-            env, exit_road,
-            red_time=DEFAULT_RED_TIME, green_time=DEFAULT_GREEN_TIME,
-            red_amber_time=DEFAULT_RED_AMBER_TIME, amber_time=DEFAULT_AMBER_TIME,
-            colour="RED"
-        )
-        try:
-            grid_exit.add_light(exit_road.traffic_light)
-        except Exception:
-            pass
-        ext_exit.add_light(exit_road.traffic_light)
-        outroads.append(exit_road)
-        # Reverse road (external -> grid)
-        road_name_rev = f"Road_ExtBottom_{grid_exit.name}_Rev"
-        exit_road_rev = FRoad(road_name_rev, speed=13, distance=100,
-                              junction_start=ext_exit, junction_end=grid_exit,
-                              car_queue=simpy.Store(env))
-        exit_road_rev.traffic_light = FTrafficLightFixed(
-            env, exit_road_rev,
-            red_time=DEFAULT_RED_TIME, green_time=DEFAULT_GREEN_TIME,
-            red_amber_time=DEFAULT_RED_AMBER_TIME, amber_time=DEFAULT_AMBER_TIME,
-            colour="RED"
-        )
-        ext_exit.add_light(exit_road_rev.traffic_light)
-        try:
-            grid_exit.add_light(exit_road_rev.traffic_light)
-        except Exception:
-            pass
-        outroads.append(exit_road_rev)
-        
-    # Left external connections.
-    left_inroads = []
-    for i in range(rows):
-        junction = grid_junctions[i][0]
-        grid_left = junction.get_side("left") if hasattr(junction,"get_side") else junction
-        ext_left = FJunctionFixed(env, f"Ext_Left_{junction.base_name if hasattr(junction, 'base_name') else junction.name}",
-                                  start=True, end=True, weight=1)
-        road_name = f"Road_ExtLeft_{grid_left.name}"
-        left_road = FRoad(road_name, speed=13, distance=100,
-                          junction_start=ext_left, junction_end=grid_left,
-                          car_queue=simpy.Store(env))
-        left_road.traffic_light = FTrafficLightFixed(
-            env, left_road,
-            red_time=DEFAULT_RED_TIME, green_time=DEFAULT_GREEN_TIME,
-            red_amber_time=DEFAULT_RED_AMBER_TIME, amber_time=DEFAULT_AMBER_TIME,
-            colour="RED"
-        )
-        ext_left.add_light(left_road.traffic_light)
-        try:
-            grid_left.add_light(left_road.traffic_light)
-        except Exception:
-            pass
-        left_inroads.append(left_road)
-        # Reverse road (grid -> external)
-        road_name_rev = f"Road_{grid_left.name}_ExtLeft_Rev"
-        left_road_rev = FRoad(road_name_rev, speed=13, distance=100,
-                              junction_start=grid_left, junction_end=ext_left,
-                              car_queue=simpy.Store(env))
-        left_road_rev.traffic_light = FTrafficLightFixed(
-            env, left_road_rev,
-            red_time=DEFAULT_RED_TIME, green_time=DEFAULT_GREEN_TIME,
-            red_amber_time=DEFAULT_RED_AMBER_TIME, amber_time=DEFAULT_AMBER_TIME,
-            colour="RED"
-        )
-        try:
-            grid_left.add_light(left_road_rev.traffic_light)
-        except Exception:
-            pass
-        ext_left.add_light(left_road_rev.traffic_light)
-        left_inroads.append(left_road_rev)
-        
-    # Right external connections.
-    right_outroads = []
-    for i in range(rows):
-        junction = grid_junctions[i][cols-1]
-        grid_right = junction.get_side("right") if hasattr(junction, "get_side") else junction
-        ext_right = FJunctionFixed(env, f"Ext_Right_{junction.base_name if hasattr(junction, 'base_name') else junction.name}",
-                                   start=True, end=True, weight=1)
-        road_name = f"Road_{grid_right.name}_ExtRight"
-        right_road = FRoad(road_name, speed=13, distance=100,
-                           junction_start=grid_right, junction_end=ext_right,
-                           car_queue=simpy.Store(env))
-        right_road.traffic_light = FTrafficLightFixed(
-            env, right_road,
-            red_time=DEFAULT_RED_TIME, green_time=DEFAULT_GREEN_TIME,
-            red_amber_time=DEFAULT_RED_AMBER_TIME, amber_time=DEFAULT_AMBER_TIME,
-            colour="RED"
-        )
-        try:
-            grid_right.add_light(right_road.traffic_light)
-        except Exception:
-            pass
-        ext_right.add_light(right_road.traffic_light)
-        right_outroads.append(right_road)
-        # Reverse road (external -> grid)
-        road_name_rev = f"Road_ExtRight_{grid_right.name}_Rev"
-        right_road_rev = FRoad(road_name_rev, speed=13, distance=100,
-                               junction_start=ext_right, junction_end=grid_right,
-                               car_queue=simpy.Store(env))
-        right_road_rev.traffic_light = FTrafficLightFixed(
-            env, right_road_rev,
-            red_time=DEFAULT_RED_TIME, green_time=DEFAULT_GREEN_TIME,
-            red_amber_time=DEFAULT_RED_AMBER_TIME, amber_time=DEFAULT_AMBER_TIME,
-            colour="RED"
-        )
-        ext_right.add_light(right_road_rev.traffic_light)
-        try:
-            grid_right.add_light(right_road_rev.traffic_light)
-        except Exception:
-            pass
-        right_outroads.append(right_road_rev)
-        
-    roads.extend(inroads + outroads + left_inroads + right_outroads)
     
-    # Add all connector roads from composite junctions.
-    for row in grid_junctions:
-        for junction in row:
-            if hasattr(junction, "connectors"):
-                for conn in junction.connectors.values():
-                    roads.append(conn)
-                    
-    cars_data = generate_cars(env, 100, roads, BASE_MEAN, cars_data=cars_data)
+    # Generate cars.
+    cars_data = []
+    def delayed_car_release(env, release_time, car):
+        yield env.timeout(release_time)
+        yield env.process(car.run())
+    for i in range(100):
+        # Choose a starting road from junctions that allow entry.
+        startable = [road for road in roads if hasattr(road.junction_start, "start") and road.junction_start.start]
+        chosen = random.choice(startable)
+        reaction_time = sample_reaction_time(mean=1.0, std=0.2)
+        release_time = random.expovariate(1/BASE_MEAN)
+        car = FCar(env, f"Car_{i}", chosen, roads, reaction_time=reaction_time)
+        env.process(delayed_car_release(env, release_time, car))
+        cars_data.append({"reaction_time": reaction_time, "road": chosen, "release_time": release_time})
+    
     if not headless:
         def run_simulation():
             while env.now < sim_duration:
@@ -359,16 +132,17 @@ def fixed_main(filename=FIXED_TIMINGS_CSV, cars_data=None, sim_duration=SIM_DURA
                 time.sleep(1)
         sim_thread = threading.Thread(target=run_simulation)
         sim_thread.start()
-        # Here we save the animation as an MP4 file.
-        animate_network(env, roads, grid_rows=rows, grid_cols=cols, update_interval=DISPLAY_INTERVAL,
-                        save_to_file="fixed_timing.mp4")
+        animate_network(env, roads, grid_rows=rows, grid_cols=cols,
+                        update_interval=display_interval, save_to_file="fixed_timing.mp4")
         sim_thread.join()
     else:
         env.run(until=sim_duration)
+    
     stats = get_statistics(roads)
-    if not headless:
-        display_statistics(roads)
-    return {"cars_data": cars_data, "stats": stats, "roads": roads}
+    display_statistics(roads)
+    
+    return {"cars_data": cars_data, "roads": roads, "stats": stats}
 
-# (Note: animate_network, get_node_positions, and update are defined in display.py)
+if __name__ == "__main__":
+    fixed_main()
 

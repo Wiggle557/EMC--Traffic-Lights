@@ -24,6 +24,7 @@ class ATrafficLightActuated:
         self.colour = initial_state.upper()
         # Start the traffic light process.
         self.process = env.process(self.run())
+        self.last_change = 0
 
     def run(self):
         """
