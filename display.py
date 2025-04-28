@@ -1,168 +1,135 @@
-from models import Road
-import networkx as nx
+# display.py
+import matplotlib
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
+import networkx as nx
+from matplotlib.animation import FuncAnimation
+from functools import partial
+from math import sqrt
+import matplotlib.patches as mpatches
 
-def set_node_roads(graph: nx.DiGraph, roads: list[Road]):
+def build_graph(roads):
     """
-    Add directed edges to the graph for each road, representing traffic flow and direction,
-    with distinct colors for each direction.
+    Constructs a NetworkX MultiDiGraph from the road objects.
+    Each edge carries:
+      - 'traffic_state' (traffic light colour),
+      - 'queue' (current number of cars on that road),
+      - 'key' (a unique identifier, typically the road's name).
     """
+    G = nx.MultiDiGraph()
     for road in roads:
-        # Assign edge colors based on traffic light states
-        edge_color = "red" if road.traffic_light.colour == "RED" else "green"
+        start = road.junction_start.name
+        end = road.junction_end.name
+        G.add_node(start)
+        G.add_node(end)
+        queue_val = len(road.car_queue.items) if hasattr(road.car_queue, 'items') else 0
+        G.add_edge(start, end, traffic_state=road.traffic_light.colour, queue=queue_val, key=road.name)
+    return G
 
-        # Add a directed edge for the road with the relevant attributes
-        graph.add_edge(
-            road.junction_start.name,
-            road.junction_end.name,
-            weight=len(road.car_queue.items),  # Traffic density (queue size)
-            label=road.name,  # Use road name as the unique label
-            color=edge_color  # Set edge color
-        )
-    return graph
+def get_node_positions(grid_rows, grid_cols):
+    """
+    Returns a dictionary of node positions. Base nodes are at (j, -i) with
+    offsets for external and connector nodes.
+    """
+    positions = {}
+    for i in range(grid_rows):
+        for j in range(grid_cols):
+            base = f"Junction_{i}_{j}"
+            positions[base] = (j, -i)
+            positions[f"Top_{base}"] = (j, -i + 0.2)
+            positions[f"Bottom_{base}"] = (j, -i - 0.2)
+            positions[f"Left_{base}"] = (j - 0.2, -i)
+            positions[f"Right_{base}"] = (j + 0.2, -i)
+            positions[f"Connector_Top_{base}"] = (j, -i + 0.2)
+            positions[f"Connector_Bottom_{base}"] = (j, -i - 0.2)
+            positions[f"Connector_Left_{base}"] = (j - 0.2, -i)
+            positions[f"Connector_Right_{base}"] = (j + 0.2, -i)
+            positions[f"Ext_Top_{base}"] = (j, -i + 0.8)
+            positions[f"Ext_Bottom_{base}"] = (j, -i - 0.8)
+            positions[f"Ext_Left_{base}"] = (j - 0.8, -i)
+            positions[f"Ext_Right_{base}"] = (j + 0.8, -i)
+    return positions
 
-def update(env, graph, roads, pos, ax):
-    """
-    Update the graph in sync with the simulation environment's time progression.
-    """
-    # Clear the previous frame
+def update(frame, env_time, roads, pos, ax):
     ax.clear()
-
-    # Update edge attributes (colors, weights) based on traffic light state
-    for road in roads:
-        edge_color = "red" if road.traffic_light.colour == "RED" else "green"
-        graph[road.junction_start.name][road.junction_end.name]["color"] = edge_color
-        graph[road.junction_start.name][road.junction_end.name]["weight"] = len(road.car_queue.items)
-
-    # Extract updated edge colors and labels
-    edge_colors = [d["color"] for _, _, d in graph.edges(data=True)]
-    edge_labels = dict([((u, v), d["label"]) for u, v, d in graph.edges(data=True)])
-
-    # Offset edges for better visualization of two-way roads
-    curved_edges = []
-    for u, v, d in graph.edges(data=True):
-        if graph.has_edge(v, u):  # Curved edges exist if reverse direction exists
-            curved_edges.append((u, v))
-
-    # Identify straight edges (not part of two-way roads)
-    straight_edges = [
-        edge for edge in graph.edges()
-        if edge not in curved_edges and (edge[1], edge[0]) not in curved_edges
-    ]
-
-    # **Draw nodes (identical to display)**
-    nx.draw_networkx_nodes(graph, pos, cmap=plt.get_cmap("jet"), node_size=800, node_color="lightblue")
-    nx.draw_networkx_labels(graph, pos, font_color="black")
-
-    # **Draw straight edges (identical to display)**
-    nx.draw_networkx_edges(graph, pos, edgelist=straight_edges, edge_color=edge_colors, arrowstyle="->", arrowsize=20, width=2)
-    # **Draw curved edges (identical to display)**
-    for u, v in curved_edges:
-        # Curved edge for one direction
-        nx.draw_networkx_edges(
-            graph, pos, edgelist=[(u, v)], connectionstyle="arc3,rad=0.2",
-            edge_color=graph[u][v]["color"], arrowstyle="->", arrowsize=20, width=2
-        )
-        # Curved edge for the reverse direction
-        nx.draw_networkx_edges(
-            graph, pos, edgelist=[(v, u)], connectionstyle="arc3,rad=-0.2",
-            edge_color=graph[v][u]["color"], arrowstyle="->", arrowsize=20, width=2
-        )
-
-    # Draw edge labels (identical to display)
-    nx.draw_networkx_edge_labels(graph, pos, edge_labels=edge_labels, font_size=8)
-
-    # Update the title with the current simulation time
-    ax.set_title(f"Traffic Network at Simulation Time: {env.now}")
-
-    # Refresh the graph display
-    plt.pause(0.1)
-
-
-def animate_graph(env, junctions, roads, pos=None):
-    """
-    Animate the graph using SimPy's environment-driven simulation time.
-    """
-    # Create a directed graph
-    graph = nx.DiGraph()
-    graph = set_node_roads(graph, roads)
-
-    # Define node positions (create a consistent layout)
-    if pos is None:
-        pos = nx.spring_layout(graph, seed=42)
-
-    # Set up the figure for live updates
-    fig, ax = plt.subplots(figsize=(10, 8))
+    G = build_graph(roads)
+    
+    nx.draw_networkx_nodes(G, pos, node_size=400, node_color="lightblue", ax=ax)
+    nx.draw_networkx_labels(G, pos, ax=ax, font_size=8)
+    
+    seen = {}
+    edge_labels = {}
+    custom_label_positions = {}
+    for u, v, key, data in G.edges(keys=True, data=True):
+        count = seen.get((u, v, key), 0)
+        rad = 0.1 * ((count // 2) + 1) * (1 if count % 2 == 0 else -1)
+        seen[(u, v, key)] = count + 1
+        
+        state = data.get("traffic_state", "RED")
+        color = "green" if state.upper() == "GREEN" else "red"
+        queue_val = data.get("queue", 0)
+        width = 1 + 0.5 * queue_val
+        
+        nx.draw_networkx_edges(G, pos, edgelist=[(u, v)],
+                                arrowstyle='->', arrowsize=15,
+                                edge_color=color, width=width,
+                                connectionstyle=f"arc3, rad={rad}",
+                                ax=ax)
+        
+        x1, y1 = pos[u]
+        x2, y2 = pos[v]
+        mx, my = (x1+x2)/2, (y1+y2)/2
+        dx, dy = x2-x1, y2-y1
+        length = sqrt(dx**2+dy**2)
+        perp = (0,0) if length==0 else (-dy/length, dx/length)
+        fixed_offset = 0.2  # Fixed offset for consistent label positioning.
+        lx, ly = mx + perp[0]*fixed_offset, my + perp[1]*fixed_offset
+        custom_label_positions[(u, v, key)] = (lx, ly)
+        
+        if queue_val:
+            edge_labels[(u, v, key)] = str(queue_val)
+    
+    for (u, v, key), label in edge_labels.items():
+        lx, ly = custom_label_positions[(u, v, key)]
+        ax.text(lx, ly, label, fontsize=7, color='blue',
+                horizontalalignment='center', verticalalignment='center')
+    
+    red_patch = mpatches.Patch(color='red', label='RED Light')
+    green_patch = mpatches.Patch(color='green', label='GREEN Light')
+    blue_patch = mpatches.Patch(color='blue', label='Queue Count')
+    ax.legend(handles=[red_patch, green_patch, blue_patch], loc='upper right', fontsize='small')
+    
+    ax.set_title(f"Simulation Time: {env_time()} seconds", fontsize=10)
     ax.set_axis_off()
 
-    def simpy_animation():
-        """
-        A SimPy process that updates the graph in sync with the simulation environment.
-        """
-        while True:
-            # Update the graph visualization with the current simulation state
-            update(env, graph, roads, pos, ax)
-            # Wait for the next simulation second
-            yield env.timeout(1)
+def animate_network(env, roads, grid_rows, grid_cols, update_interval=1, save_to_file=None):
+    pos = get_node_positions(grid_rows, grid_cols)
+    fig, ax = plt.subplots(figsize=(8,8))
+    env_time = partial(lambda: int(env.now))
+    ani = FuncAnimation(fig, update, fargs=(env_time, roads, pos, ax),
+                        interval=update_interval*1000,
+                        cache_frame_data=False, save_count=200)
+    if save_to_file:
+        writer = 'ffmpeg' if save_to_file.endswith('.mp4') else 'imagemagick'
+        ani.save(save_to_file, fps=5, writer=writer)
+        print(f"Animation saved to {save_to_file}")
+    else:
+        plt.show()
+    return ani
 
-    # Add the animation process to the SimPy environment
-    env.process(simpy_animation())
-
-    # Start the animation (blocking call to show the plot)
-    plt.show()
-
-def display(junctions, roads, pos=None):
-    """
-    Display the static graph of junctions and roads with directed edges for traffic flow visualization.
-    """
-    # Create a directed graph
-    graph = nx.DiGraph()
-
-    # Populate the graph with nodes and edges
-    graph = set_node_roads(graph, roads)
-
-    # Define node values for coloring (optional)
-    val_map = {junction.name: 1.0 for junction in junctions}
-    values = [val_map.get(node, 0.45) for node in graph.nodes()]
-
-    # Define edge colors based on attributes
-    edge_colors = [d["color"] for _, _, d in graph.edges(data=True)]
-
-    # Define edge labels (road names)
-    edge_labels = dict([((u, v), d["label"]) for u, v, d in graph.edges(data=True)])
-
-    # Use the provided layout or create a new one
-    if pos is None:
-        pos = nx.spring_layout(graph, seed=42)
-
-    # Offset edges for better visualization of two-way roads
-    curved_edges = []
-    for u, v, d in graph.edges(data=True):
-        if graph.has_edge(v, u):  # If reverse edge exists, make it curved
-            curved_edges.append((u, v))
-
-    # Draw nodes and labels
-    nx.draw_networkx_nodes(graph, pos, cmap=plt.get_cmap("jet"), node_size=800, node_color="lightblue")
-    nx.draw_networkx_labels(graph, pos, font_color="black")
-
-    # Draw edges with curved lines for two-way roads
-    for u, v in curved_edges:
-        nx.draw_networkx_edges(
-            graph, pos, edgelist=[(u, v)], connectionstyle="arc3,rad=0.2",
-            edge_color=graph[u][v]["color"], arrowstyle="->", arrowsize=20, width=2
-        )
-
-    # Draw straight edges
-    straight_edges = [edge for edge in graph.edges() if edge not in curved_edges and (edge[1], edge[0]) not in curved_edges]
-    nx.draw_networkx_edges(graph, pos, edgelist=straight_edges, edge_color=edge_colors, arrowstyle="->", width=2)
-
-    # Draw edge labels
-    nx.draw_networkx_edge_labels(graph, pos, edge_labels=edge_labels, font_size=8)
-
-    # Show the graph
-    plt.title("Traffic Network with Two-Way Roads and Different Colors")
-    plt.show()
-
-    # Return the layout for reuse
-    return pos
+def display_statistics(roads):
+    total_passes = 0
+    total_wait = 0
+    count = 0
+    for road in roads:
+        for car in road.car_queue.items:
+            total_passes += car.junction_passes
+            total_wait += getattr(car, "wait_time", 0)
+            count += 1
+    avg_wait = total_wait / count if count else 0
+    print("Simulation Statistics:")
+    print("----------------------")
+    print("Total Junction Passes:", total_passes)
+    print("Average Junction Passes per Car:", total_passes/count if count else 0)
+    print("Average Waiting Time per Car:", avg_wait)
 

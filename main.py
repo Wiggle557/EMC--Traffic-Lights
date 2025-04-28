@@ -1,51 +1,28 @@
-import simpy
-from models import TrafficLight, Road, Junction
-from setup import setup
-from display import animate_graph, display
-import networkx as nx
+# main.py
+import fixed_model
+import actuated_model
+import genetic_algorithm
 
 def main():
-    env = simpy.Environment()
-    num_junctions = 4
-    junction_names = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    junctions = []
-    roads = []
+    print("Select a simulation mode:")
+    print("  sim    - Fixed simulation using the fixed timing CSV")
+    print("  simdef - Fixed simulation using default fixed timings (no CSV)")
+    print("  act    - Actuated simulation")
+    print("  ga     - Genetic algorithm")
+    choice = input("Enter your choice: ").strip().lower()
 
-    # Create junctions
-    for i in range(num_junctions):
-        junctions.append(Junction(env, f"{junction_names[i]}"))
-
-    junctions.append(Junction(env, "OUT", end=True))
-    # Create roads connecting junctions
-    road_names = [[0, 1], [1, 2], [2, 0], [1, 3], [0, 2], [3, 0], [0, 4], [2, 4]]
-    for name in road_names:
-        new_road = Road(f"Road {junctions[name[0]].name}{junctions[name[1]].name}", 6, 12, junctions[name[0]], junctions[name[1]], simpy.Store(env))
-        roads.append(new_road)
-
-    # Create and assign traffic lights to roads
-    for road in roads:
-        road.traffic_light = TrafficLight(env, red_time=15, green_time=15)
-        road.traffic_light.name = road.name
-        road.junction_end.add_light(road.traffic_light)
-
-    # Add simulation processes
-    env.process(setup(env, 20, roads, (1, 20)))
-
-    # Animate the graph with environment updates
-    animate_graph(env, junctions, roads)
-
-    # Run the simulation
-    env.run(until=180)
-
-    # Final static display of the graph
-    pos = nx.spring_layout(nx.DiGraph())
-    display(junctions, roads, pos)
-
-    print("Cars left in queue:")
-    for road in roads:
-        print(road.name)
-        for car in road.car_queue.items:
-            print(car.name)
+    if choice == "sim":
+        # Run fixed simulation using the CSV (candidate_timings remains None)
+        fixed_model.fixed_main(headless=False)
+    elif choice == "simdef":
+        # Run fixed simulation using default timings (ignoring CSV by passing an empty dictionary)
+        fixed_model.fixed_main(candidate_timings={}, headless=False)
+    elif choice == "act":
+        actuated_model.actuated_main(headless=False)
+    elif choice == "ga":
+        genetic_algorithm.run_genetic_algorithm()
+    else:
+        print("Invalid option selected.")
 
 if __name__ == "__main__":
     main()
