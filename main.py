@@ -3,6 +3,7 @@ import fixed_model
 import actuated_model
 import genetic_algorithm
 
+
 def main():
     print("Select a simulation mode:")
     print("  sim    - Fixed simulation using the fixed timing CSV")
@@ -24,6 +25,6 @@ def main():
     else:
         print("Invalid option selected.")
 
+
 if __name__ == "__main__":
     main()
-

@@ -1,20 +1,31 @@
 # actuated.py
 import simpy
 
+
 class ATrafficLightActuated:
     """
     A basic actuated traffic light for simulation purposes.
-    
+
     This class is a simple cyclical traffic light. In a more sophisticated model,
     you might incorporate sensor input and dynamic adjustments.
-    
+
     Attributes:
       - env: The simpy environment.
       - road: The road object this traffic light is attached to.
       - red_time, green_time, red_amber_time, amber_time: Phase durations.
       - colour: Current phase as a string.
     """
-    def __init__(self, env, road, red_time, green_time, red_amber_time, amber_time, initial_state="RED"):
+
+    def __init__(
+        self,
+        env,
+        road,
+        red_time,
+        green_time,
+        red_amber_time,
+        amber_time,
+        initial_state="RED",
+    ):
         self.env = env
         self.road = road
         self.red_time = red_time

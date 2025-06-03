@@ -5,16 +5,16 @@
 # -----------------------------
 GRID_ROWS = 7
 GRID_COLS = 7
-SIM_DURATION = 600         # Total simulation time in seconds.
-DISPLAY_INTERVAL = 2         # Animation update interval in seconds.
-BASE_MEAN = 9                # Base mean for exponential car release.
+SIM_DURATION = 600  # Total simulation time in seconds.
+DISPLAY_INTERVAL = 2  # Animation update interval in seconds.
+BASE_MEAN = 9  # Base mean for exponential car release.
 RANDOM_SEED = 42
 
 # -----------------------------
 # Road Length Settings
 # -----------------------------
 HORIZONTAL_ROAD_LENGTH = 135  # Length in meters for horizontal roads.
-VERTICAL_ROAD_LENGTH = 120    # Length in meters for vertical roads.
+VERTICAL_ROAD_LENGTH = 120  # Length in meters for vertical roads.
 
 # -----------------------------
 # Timing Defaults for Fixed Model
@@ -63,8 +63,7 @@ POINTS_OF_INTEREST = {
 # The simulation logic can use these values to increase the car generation rate (or volume)
 # during the rush hour period.
 RUSH_HOUR = {
-    "start": 300,        # Rush hour begins at 300 seconds (example).
-    "end": 301,          # Rush hour ends at 600 seconds.
-    "multiplier": 1.5    # 50% increase in traffic during rush hour.
+    "start": 300,  # Rush hour begins at 300 seconds (example).
+    "end": 301,  # Rush hour ends at 600 seconds.
+    "multiplier": 1.5,  # 50% increase in traffic during rush hour.
 }
-

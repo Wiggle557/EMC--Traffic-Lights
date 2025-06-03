@@ -7,15 +7,23 @@ import simpy
 # If needed, you can import FRoad here:
 # from quiet import FRoad
 
+
 class FTrafficLightFixed:
     """
     This fixed timing traffic light runs through its phases in a fixed cycle.
     The timings come from predetermined parameters (for example, imported from a CSV).
     """
-    def __init__(self, env: simpy.Environment, road: FRoad,
-                 red_time: float, green_time: float,
-                 red_amber_time: float, amber_time: float,
-                 colour: str = "RED"):
+
+    def __init__(
+        self,
+        env: simpy.Environment,
+        road: FRoad,
+        red_time: float,
+        green_time: float,
+        red_amber_time: float,
+        amber_time: float,
+        colour: str = "RED",
+    ):
         self.env = env
         self.road = road
         self.colour = colour
@@ -47,16 +55,20 @@ class FTrafficLightFixed:
                 self.colour = "RED"
                 yield self.env.timeout(self.red_time)
 
+
 class FJunctionFixed(FJunction):
     """
     A junction class for use with fixed-timing signals.
     It omits the dynamic actuation logic (i.e. no force_red/force_green commands).
     Instead, the traffic lights run on their own fixed cycle.
     """
-    def __init__(self, env, name: str, end: bool = False, start: bool = False, weight=1):
+
+    def __init__(
+        self, env, name: str, end: bool = False, start: bool = False, weight=1
+    ):
         # Use the same initialization as FJunction.
         super().__init__(env, name, end, start, weight)
-    
+
     def actuate_lights(self):
         """
         Override the dynamic actuation so that it does nothing.
